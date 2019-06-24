@@ -17,9 +17,11 @@ def main():
 
 
 def get_input():
+    # todo 没有对应文件的时候进行提示
     wb = load_workbook('input.xlsx')
     ws = wb.active
     result = []
+    # todo 文档没有按照格式进行填写的时候进行提示
     for row in ws.iter_rows(min_row=2, values_only=True):
         result.append(row)
     return result
@@ -36,6 +38,7 @@ def get_rank(domain, keyword):
 def get_page(domain, keyword, page):
     global global_url, global_text
     print('开始第%d页' % page)
+    # todo 这个网址这样请求就一定能够返回想要的结果吗？
     params = {
         'q': keyword,
         'from': 'smor',
@@ -45,9 +48,13 @@ def get_page(domain, keyword, page):
         'layout': 'html',
         'page': page
     }
+    # todo 不同的UA有什么影响
+    # todo 要怎么模拟真实的用户进行搜索 HEAD要怎么填写
     headers = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1'
     }
+    # todo 网络出现问题的时候怎么办？
+    # todo 抓取的内容有问题的时候怎么办？
     r = requests.get('http://so.m.sm.cn/s', params=params, headers=headers)
     global_url = r.url
     global_text = r.text
@@ -72,6 +79,7 @@ def get_page(domain, keyword, page):
 def get_all_item(soup):
     if soup.body:
         all_item = []
+        # todo 将来会不会出现别的div 是不是要考虑一下更可靠的筛选方式来确定那些是“排名结果”
         for child in soup.body.children:
             if child.name == 'div':
                 all_item.append(child)
@@ -83,14 +91,14 @@ def get_all_item(soup):
 def is_domain_item(item, domain):
     for link in item.find_all('a'):
         url = link.get('href')
-        if domain in url:
+        if url and domain in url:
             return True
 
 
 def get_url(item, domain):
     for link in item.find_all('a'):
         url = link.get('href')
-        if domain in url:
+        if url and domain in url:
             return url
 
 
