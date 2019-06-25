@@ -60,15 +60,19 @@ def get_page(domain, keyword, page):
     # todo 网络出现问题的时候怎么办？
     # todo 抓取的内容有问题的时候怎么办？
     r = None
-    while r is None:
+    soup = None
+    while r is None or soup is None:
         try:
             r = requests.get('http://so.m.sm.cn/s', params=params, headers=headers)
         except requests.exceptions.ConnectionError:
             print('检查到网络断开，%s秒之后尝试重新抓取' % TIMEOUT)
             time.sleep(TIMEOUT)
+        soup = BeautifulSoup(r.text, 'lxml')
+        if soup.body is None:
+            print('请求到的页面的内容为空，将再次进行请求')
+            soup = None
     global_url = r.url
     global_text = r.text
-    soup = BeautifulSoup(r.text, 'lxml')
     all_item = get_all_item(soup)
     result = []
     rank = 1
@@ -125,6 +129,7 @@ def set_output(output):
     for (domain, keyword, rank, url, title, date_time) in output:
         ws.append((domain, keyword, '神马', rank, url, title, date_time))
     file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
+    # todo 查询一定数量之后就保存下来
     wb.save(file_name)
     input('查询结束，查询结果保存在 %s' % file_name)
 
