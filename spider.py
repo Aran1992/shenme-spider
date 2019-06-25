@@ -10,14 +10,13 @@ TIMEOUT = 1
 
 global_url = ""
 global_text = ""
+global_output = []
 
 
 def main():
-    output = []
     for (domain, keyword) in get_input():
-        result = get_rank(domain, keyword)
-        output += result
-    set_output(output)
+        get_rank(domain, keyword)
+    return set_output()
 
 
 def get_input():
@@ -33,14 +32,12 @@ def get_input():
 
 def get_rank(domain, keyword):
     print('开始抓取 域名：%s 关键词：%s' % (domain, keyword))
-    result = []
     for i in range(PAGE):
-        result += get_page(domain, keyword, i + 1)
-    return result
+        get_page(domain, keyword, i + 1)
 
 
 def get_page(domain, keyword, page):
-    global global_url, global_text
+    global global_url, global_text, global_output
     print('开始第%d页' % page)
     # todo 这个网址这样请求就一定能够返回想要的结果吗？
     params = {
@@ -87,19 +84,16 @@ def get_page(domain, keyword, page):
                 datetime.datetime.now()
             ))
         rank += 1
-    return result
+    global_output += result
 
 
 def get_all_item(soup):
-    if soup.body:
-        all_item = []
-        # todo 将来会不会出现别的div 是不是要考虑一下更可靠的筛选方式来确定那些是“排名结果”
-        for child in soup.body.children:
-            if child.name == 'div':
-                all_item.append(child)
-        return all_item
-    else:
-        raise RuntimeError('出现了soup.body为None的BUG')
+    all_item = []
+    # todo 将来会不会出现别的div 是不是要考虑一下更可靠的筛选方式来确定那些是“排名结果”
+    for child in soup.body.children:
+        if child.name == 'div':
+            all_item.append(child)
+    return all_item
 
 
 def is_domain_item(item, domain):
@@ -122,16 +116,17 @@ def get_title(item):
             return span.text
 
 
-def set_output(output):
+def set_output():
+    global global_output
     wb = Workbook()
     ws = wb.active
     ws.append(('域名', '关键词', '搜索引擎', '排名', '真实地址', '标题', '查询时间'))
-    for (domain, keyword, rank, url, title, date_time) in output:
+    for (domain, keyword, rank, url, title, date_time) in global_output:
         ws.append((domain, keyword, '神马', rank, url, title, date_time))
     file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
     # todo 查询一定数量之后就保存下来
     wb.save(file_name)
-    input('查询结束，查询结果保存在 %s' % file_name)
+    return file_name
 
 
 def get_cur_time_filename():
@@ -150,7 +145,8 @@ def error_exit(title):
 
 
 try:
-    main()
+    file_name = main()
+    input('查询结束，查询结果保存在 %s' % file_name)
 except:
     filename = 'error-%s.log' % get_cur_time_filename()
     f = open(filename, 'w', encoding="utf-8")
@@ -164,4 +160,5 @@ except:
 ''' % (traceback.format_exc(), global_url, global_text))
     f.close()
     traceback.print_exc()
+    set_output()
     input('请将最新的error.log文件发给技术人员')
