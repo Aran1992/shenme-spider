@@ -6,6 +6,10 @@ import time
 import traceback
 
 PAGE = 10
+TIMEOUT = 1
+
+global_url = ""
+global_text = ""
 
 
 def main():
@@ -55,7 +59,13 @@ def get_page(domain, keyword, page):
     }
     # todo 网络出现问题的时候怎么办？
     # todo 抓取的内容有问题的时候怎么办？
-    r = requests.get('http://so.m.sm.cn/s', params=params, headers=headers)
+    r = None
+    while r is None:
+        try:
+            r = requests.get('http://so.m.sm.cn/s', params=params, headers=headers)
+        except requests.exceptions.ConnectionError:
+            print('检查到网络断开，%s秒之后尝试重新抓取' % TIMEOUT)
+            time.sleep(TIMEOUT)
     global_url = r.url
     global_text = r.text
     soup = BeautifulSoup(r.text, 'lxml')
