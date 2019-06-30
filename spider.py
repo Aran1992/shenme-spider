@@ -22,39 +22,51 @@ global_file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
 
 def main():
     init_output()
-    for i, (domain, keyword) in enumerate(get_input()):
-        get_rank(i + 1, domain, keyword)
+    (keywords, domain_list) = get_input()
+    print('总共要查找%s关键词，有%s个网站' % (len(keywords), len(domain_list)))
+    for i, keyword in enumerate(keywords):
+        get_rank(i + 1, keyword, domain_list)
+
+
+def init_output():
+    global global_file_name
+    wb = Workbook()
+    ws = wb.active
+    ws.append(('域名', '关键词', '搜索引擎', '排名', '真实地址', '标题', '查询时间'))
+    wb.save(global_file_name)
 
 
 def get_input():
     # todo 没有对应文件的时候进行提示
     wb = load_workbook('input.xlsx')
     ws = wb.active
-    result = []
+    k = set()
+    d = set()
     # todo 文档没有按照格式进行填写的时候进行提示
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        result.append(row)
-    return result
+    for (domain, keyword) in ws.iter_rows(min_row=2, values_only=True):
+        k.add(keyword)
+        d.add(domain)
+    return k, d
 
 
-def get_rank(index, domain, keyword):
-    print('开始抓取 第%s条 域名：%s 关键词：%s' % (index, domain, keyword))
+def get_rank(index, keyword, domain_list):
+    print('开始抓取第%s个关键词：%s' % (index, keyword))
     for i in range(PAGE):
-        get_page(domain, keyword, i + 1)
+        get_page(i + 1, keyword, domain_list)
 
 
-def get_page(domain, keyword, page):
+def get_page(page, keyword, domain_list):
     global global_url, global_text
     print('开始第%d页' % page)
     # todo 这个网址这样请求就一定能够返回想要的结果吗？
+    # https://m.sm.cn/s?q=%E7%99%BE%E5%BA%A6&page=2&by=next&from=smor&tomode=center&safe=1
     params = {
         'q': keyword,
-        'from': 'smor',
-        'safe': '1',
-        'snum': '6',
+        'page': page,
         'by': 'next',
-        'layout': 'html',
-        'page': page
+        'from': 'smor',
+        'tomode': 'center',
+        'safe': '1',
     }
     # todo 不同的UA有什么影响
     # todo 要怎么模拟真实的用户进行搜索 HEAD要怎么填写
@@ -68,7 +80,7 @@ def get_page(domain, keyword, page):
     soup = None
     while r is None or soup is None:
         try:
-            r = requests.get('http://so.m.sm.cn/s', params=params, headers=headers)
+            r = requests.get('https://m.sm.cn/s', params=params, headers=headers)
         except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
             print('检查到网络断开，%s秒之后尝试重新抓取' % TIMEOUT)
             time.sleep(TIMEOUT)
@@ -83,26 +95,22 @@ def get_page(domain, keyword, page):
     result = []
     rank = 1
     for item in all_item:
-        if is_domain_item(item, domain):
-            result.append((
-                domain,
-                keyword,
-                '%d-%d' % (page, rank),
-                get_url(item, domain),
-                get_title(item),
-                datetime.datetime.now()
-            ))
+        for domain in domain_list:
+            if is_domain_item(item, domain):
+                result.append((
+                    domain,
+                    keyword,
+                    '%d-%d' % (page, rank),
+                    get_url(item, domain),
+                    get_title(item),
+                    datetime.datetime.now()
+                ))
         rank += 1
     set_output(result)
 
 
 def get_all_item(soup):
-    all_item = []
-    # todo 将来会不会出现别的div 是不是要考虑一下更可靠的筛选方式来确定那些是“排名结果”
-    for child in soup.body.children:
-        if child.name == 'div':
-            all_item.append(child)
-    return all_item
+    return soup.find_all('div', class_='ali_row')
 
 
 def is_domain_item(item, domain):
@@ -120,17 +128,7 @@ def get_url(item, domain):
 
 
 def get_title(item):
-    for span in item.find_all('span'):
-        if span.text:
-            return span.text
-
-
-def init_output():
-    global global_file_name
-    wb = Workbook()
-    ws = wb.active
-    ws.append(('域名', '关键词', '搜索引擎', '排名', '真实地址', '标题', '查询时间'))
-    wb.save(global_file_name)
+    return ''.join(item.find('a').findAll(text=True))
 
 
 def set_output(result):
@@ -140,17 +138,6 @@ def set_output(result):
     for (domain, keyword, rank, url, title, date_time) in result:
         ws.append((domain, keyword, '神马', rank, url, title, date_time))
     wb.save(global_file_name)
-
-
-def error_exit(title):
-    raise RuntimeError('''%s
-
-请求的url为：
-%s
-
-响应的text为：
-%s
-''' % (title, global_url, global_text))
 
 
 try:
