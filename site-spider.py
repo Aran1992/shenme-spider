@@ -22,7 +22,7 @@ class SiteSpider:
             soup = self.get_title(domain, page)
             while soup and soup.find('a', class_='next'):
                 page += 1
-                self.get_title(domain, page)
+                soup = self.get_title(domain, page)
             input('查询结束，查询结果保存在 %s' % self.file_name)
         except:
             filename = 'error-%s.log' % get_cur_time_filename()
@@ -52,8 +52,8 @@ class SiteSpider:
         # todo 不同的UA有什么影响
         # todo 要怎么模拟真实的用户进行搜索 HEAD要怎么填写
         headers = {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1'
-            # 'User-Agent': 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
+            # 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1'
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
         }
         r = None
         soup = None
