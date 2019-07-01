@@ -4,6 +4,7 @@ from openpyxl import load_workbook, Workbook
 import datetime
 import time
 import traceback
+from urllib.parse import urlparse
 
 
 # todo 将导入的网址关键词进行合并 同一个关键词只查询一次 然后在其中搜索对应的域名
@@ -22,10 +23,10 @@ global_file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
 
 def main():
     init_output()
-    (keywords, domain_list) = get_input()
-    print('总共要查找%s关键词，有%s个网站' % (len(keywords), len(domain_list)))
-    for i, keyword in enumerate(keywords):
-        get_rank(i + 1, keyword, domain_list)
+    (keyword_set, domain_set) = get_input()
+    print('总共要查找%s关键词，有%s个网站' % (len(keyword_set), len(domain_set)))
+    for i, keyword in enumerate(keyword_set):
+        get_rank(i + 1, keyword, domain_set)
 
 
 def init_output():
@@ -49,13 +50,13 @@ def get_input():
     return k, d
 
 
-def get_rank(index, keyword, domain_list):
+def get_rank(index, keyword, domain_set):
     print('开始抓取第%s个关键词：%s' % (index, keyword))
     for i in range(PAGE):
-        get_page(i + 1, keyword, domain_list)
+        get_page(i + 1, keyword, domain_set)
 
 
-def get_page(page, keyword, domain_list):
+def get_page(page, keyword, domain_set):
     global global_url, global_text
     print('开始第%d页' % page)
     # todo 这个网址这样请求就一定能够返回想要的结果吗？
@@ -95,36 +96,30 @@ def get_page(page, keyword, domain_list):
     result = []
     rank = 1
     for item in all_item:
-        for domain in domain_list:
-            if is_domain_item(item, domain):
-                result.append((
-                    domain,
-                    keyword,
-                    '%d-%d' % (page, rank),
-                    get_url(item, domain),
-                    get_title(item),
-                    datetime.datetime.now()
-                ))
+        link = item.find('a')
+        url = link.get('href')
+        d = get_url_domain(url)
+        if d in domain_set:
+            result.append((
+                d,
+                keyword,
+                '%d-%d' % (page, rank),
+                url,
+                get_title(item),
+                datetime.datetime.now()
+            ))
         rank += 1
     set_output(result)
 
 
+def get_url_domain(url):
+    li = urlparse(url).netloc.split('.')
+    length = len(li)
+    return '{}.{}'.format(li[length - 2], li[length - 1])
+
+
 def get_all_item(soup):
     return soup.find_all('div', class_='ali_row')
-
-
-def is_domain_item(item, domain):
-    for link in item.find_all('a'):
-        url = link.get('href')
-        if url and domain in url:
-            return True
-
-
-def get_url(item, domain):
-    for link in item.find_all('a'):
-        url = link.get('href')
-        if url and domain in url:
-            return url
 
 
 def get_title(item):
