@@ -28,11 +28,14 @@ def main():
 
 
 def start(keyword_set, domain_set):
+    start_time = datetime.datetime.now()
     init_output()
     print('总共要查找%s关键词，有%s个网站' % (len(keyword_set), len(domain_set)))
     for i, keyword in enumerate(keyword_set):
         get_rank(i + 1, keyword, domain_set)
     print('查询结束，查询结果保存在 %s' % global_file_name)
+    end_time = datetime.datetime.now()
+    print('本次查询用时%s秒' % (end_time - start_time).total_seconds())
     wait()
     start(keyword_set, domain_set)
 
@@ -48,6 +51,7 @@ def wait():
     wait_time = (x - now).total_seconds()
     print('下次查询时间为%s，将在%s秒后开始' % (x, wait_time))
     time.sleep(wait_time)
+
 
 def init_output():
     global global_file_name
