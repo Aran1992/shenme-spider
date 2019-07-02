@@ -5,6 +5,7 @@ import datetime
 import time
 import traceback
 from urllib.parse import urlparse
+from configparser import ConfigParser
 
 
 # todo 将导入的网址关键词进行合并 同一个关键词只查询一次 然后在其中搜索对应的域名
@@ -18,19 +19,39 @@ TIMEOUT = 1
 
 global_url = ''
 global_text = ''
-global_file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
+global_file_name = ''
 
 
 def main():
-    init_output()
     (keyword_set, domain_set) = get_input()
+    start(keyword_set, domain_set)
+
+
+def start(keyword_set, domain_set):
+    init_output()
     print('总共要查找%s关键词，有%s个网站' % (len(keyword_set), len(domain_set)))
     for i, keyword in enumerate(keyword_set):
         get_rank(i + 1, keyword, domain_set)
+    print('查询结束，查询结果保存在 %s' % global_file_name)
+    wait()
+    start(keyword_set, domain_set)
 
+
+def wait():
+    now = datetime.datetime.now()
+    cfg = ConfigParser()
+    cfg.read('config.ini')
+    hour = int(cfg.get('config', 'hour'))
+    x = datetime.datetime(now.year, now.month, now.day, hour)
+    if x <= now:
+        x = datetime.datetime.fromtimestamp(x.timestamp() + 24 * 60 * 60)
+    wait_time = (x - now).total_seconds()
+    print('下次查询时间为%s，将在%s秒后开始' % (x, wait_time))
+    time.sleep(wait_time)
 
 def init_output():
     global global_file_name
+    global_file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
     wb = Workbook()
     ws = wb.active
     ws.append(('域名', '关键词', '搜索引擎', '排名', '真实地址', '标题', '查询时间'))
@@ -137,7 +158,6 @@ def set_output(result):
 
 try:
     main()
-    input('查询结束，查询结果保存在 %s' % global_file_name)
 except:
     filename = 'error-%s.log' % get_cur_time_filename()
     f = open(filename, 'w', encoding='utf-8')
