@@ -1,17 +1,26 @@
 import requests
 from bs4 import BeautifulSoup
 from openpyxl import load_workbook, Workbook
-import datetime
-import time
-import traceback
+import os
 from urllib.parse import urlparse
+import traceback
+import time
+import datetime
 from configparser import ConfigParser
 
 
-# todo 将导入的网址关键词进行合并 同一个关键词只查询一次 然后在其中搜索对应的域名
+class MyError(RuntimeError):
+    pass
+
 
 def get_cur_time_filename():
     return time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
+
+
+def format_cd_time(seconds):
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    return "%d小时%02d分%02d秒" % (h, m, s)
 
 
 PAGE = 10
@@ -22,25 +31,19 @@ global_text = ''
 global_file_name = ''
 
 
-def main():
-    (keyword_set, domain_set) = get_input()
-    start(keyword_set, domain_set)
-
-
-def start(keyword_set, domain_set):
+def search():
     start_time = datetime.datetime.now()
+    (keyword_set, domain_set) = get_input()
     init_output()
     print('总共要查找%s关键词，有%s个网站' % (len(keyword_set), len(domain_set)))
     for i, keyword in enumerate(keyword_set):
         get_rank(i + 1, keyword, domain_set)
     print('查询结束，查询结果保存在 %s' % global_file_name)
     end_time = datetime.datetime.now()
-    print('本次查询用时%s秒' % (end_time - start_time).total_seconds())
-    wait()
-    start(keyword_set, domain_set)
+    print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
 
 
-def wait():
+def start():
     now = datetime.datetime.now()
     cfg = ConfigParser()
     cfg.read('config.ini')
@@ -49,8 +52,10 @@ def wait():
     if x <= now:
         x = datetime.datetime.fromtimestamp(x.timestamp() + 24 * 60 * 60)
     wait_time = (x - now).total_seconds()
-    print('下次查询时间为%s，将在%s秒后开始' % (x, wait_time))
+    print('下次查询时间为%s，将在%s后开始' % (x, format_cd_time(wait_time)))
     time.sleep(wait_time)
+    search()
+    start()
 
 
 def init_output():
@@ -64,7 +69,14 @@ def init_output():
 
 def get_input():
     # todo 没有对应文件的时候进行提示
-    wb = load_workbook('input.xlsx')
+    file_path = ''
+    path = '.\\import'
+    for file in os.listdir(path):
+        file_path = os.path.join(path, file)
+        break
+    if file_path == '' or not file_path.endswith('.xlsx'):
+        raise MyError('import目录之下没有发现xlsx文件')
+    wb = load_workbook(file_path)
     ws = wb.active
     k = set()
     d = set()
@@ -160,19 +172,35 @@ def set_output(result):
     wb.save(global_file_name)
 
 
-try:
+def main():
+    try:
+        while True:
+            mode = input('定时运行（输入1）还是马上运行（输入0）？')
+            if mode == '0':
+                search()
+            elif mode == '1':
+                start()
+            else:
+                print('输入了未知模式，请重新输入')
+    except MyError as e:
+        input(e)
+    except KeyboardInterrupt:
+        input('已经强行退出程序')
+    except:
+        filename = 'error-%s.log' % get_cur_time_filename()
+        f = open(filename, 'w', encoding='utf-8')
+        f.write('''%s
+
+    请求的URL为：
+    %s
+
+    返回的内容为：
+    %s
+    ''' % (traceback.format_exc(), global_url, global_text))
+        f.close()
+        traceback.print_exc()
+        input('请将最新的error.log文件发给技术人员')
+
+
+if __name__ == '__main__':
     main()
-except:
-    filename = 'error-%s.log' % get_cur_time_filename()
-    f = open(filename, 'w', encoding='utf-8')
-    f.write('''%s
-
-请求的URL为：
-%s
-
-返回的内容为：
-%s
-''' % (traceback.format_exc(), global_url, global_text))
-    f.close()
-    traceback.print_exc()
-    input('请将最新的error.log文件发给技术人员')

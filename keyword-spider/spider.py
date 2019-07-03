@@ -2,7 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 from openpyxl import load_workbook, Workbook
 import time
+import datetime
 import traceback
+import os
+from configparser import ConfigParser
 
 TIMEOUT = 1
 
@@ -11,19 +14,32 @@ def get_cur_time_filename():
     return time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
 
 
+def format_cd_time(seconds):
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    return "%d小时%02d分%02d秒" % (h, m, s)
+
+
+class MyError(RuntimeError):
+    pass
+
+
 class SiteSpider:
     def __init__(self):
+        self.file_name = ''
         try:
-            self.file_name = '收录网站标题-%s.xlsx' % get_cur_time_filename()
-            wb = Workbook()
-            wb.save(self.file_name)
-            domain = self.get_input()
-            page = 1
-            soup = self.get_title(domain, page)
-            while soup and soup.find('a', class_='next'):
-                page += 1
-                soup = self.get_title(domain, page)
-            input('查询结束，查询结果保存在 %s' % self.file_name)
+            while True:
+                mode = input('定时运行（输入1）还是马上运行（输入0）？')
+                if mode == '0':
+                    self.search()
+                elif mode == '1':
+                    self.start()
+                else:
+                    print('输入了未知模式，请重新输入')
+        except MyError as e:
+            input(e)
+        except KeyboardInterrupt:
+            input('已经强行退出程序')
         except:
             filename = 'error-%s.log' % get_cur_time_filename()
             f = open(filename, 'w', encoding='utf-8')
@@ -32,8 +48,44 @@ class SiteSpider:
             traceback.print_exc()
             input('请将最新的error.log文件发给技术人员')
 
+    def search(self):
+        start_time = datetime.datetime.now()
+        self.file_name = '收录网站标题-%s.xlsx' % get_cur_time_filename()
+        wb = Workbook()
+        wb.save(self.file_name)
+        domain = self.get_input()
+        page = 1
+        soup = self.get_title(domain, page)
+        while soup and soup.find('a', class_='next'):
+            page += 1
+            soup = self.get_title(domain, page)
+        print('查询结束，查询结果保存在 %s' % self.file_name)
+        end_time = datetime.datetime.now()
+        print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
+
+    def start(self):
+        now = datetime.datetime.now()
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        hour = int(cfg.get('config', 'hour'))
+        x = datetime.datetime(now.year, now.month, now.day, hour)
+        if x <= now:
+            x = datetime.datetime.fromtimestamp(x.timestamp() + 24 * 60 * 60)
+        wait_time = (x - now).total_seconds()
+        print('下次查询时间为%s，将在%s后开始' % (x, format_cd_time(wait_time)))
+        time.sleep(wait_time)
+        self.search()
+        self.start()
+
     def get_input(self):
-        wb = load_workbook('site-input.xlsx')
+        file_path = ''
+        path = '.\\import'
+        for file in os.listdir(path):
+            file_path = os.path.join(path, file)
+            break
+        if file_path == '' or not file_path.endswith('.xlsx'):
+            raise MyError('import目录之下没有发现xlsx文件')
+        wb = load_workbook(file_path)
         ws = wb.active
         for (domain,) in ws.iter_rows(values_only=True):
             return domain
