@@ -2,10 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 from openpyxl import load_workbook, Workbook
 import os
-from urllib.parse import urlparse
-import traceback
 import time
 import datetime
+import traceback
+from urllib.parse import urlparse
 from configparser import ConfigParser
 
 

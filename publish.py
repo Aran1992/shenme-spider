@@ -1,8 +1,14 @@
 import os
 import zipfile
 
-mode = input('打包keyword-spider（输入0）还是打包rank-spider（输入1）？')
-name = mode == '0' and 'keyword-spider' or 'rank-spider'
+mode = input('打包keyword-spider:0/rank-spider:1/sogou-spider:2？')
+name = ''
+if mode == '0':
+    name = 'keyword-spider'
+elif mode == '1':
+    name = 'rank-spider'
+elif mode == '2':
+    name = 'sogou-spider'
 os.system('pyinstaller -F ./%s/spider.py' % name)
 zipf = zipfile.ZipFile('%s.zip' % name, 'w')
 zipf.write('./%s/config.ini' % name, 'config.ini')
