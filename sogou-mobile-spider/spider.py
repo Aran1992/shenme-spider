@@ -49,12 +49,12 @@ class Spider:
             f = open(filename, 'w', encoding='utf-8')
             f.write('''%s
 
-        请求的URL为：
-        %s
+请求的URL为：
+%s
 
-        返回的内容为：
-        %s
-        ''' % (traceback.format_exc(), self.url, self.text))
+返回的内容为：
+%s
+''' % (traceback.format_exc(), self.url, self.text))
             f.close()
             traceback.print_exc()
             input('请将最新的error.log文件发给技术人员')
@@ -134,8 +134,13 @@ class Spider:
             if not url.startswith('http'):
                 url = urljoin(r.url, url)
                 r = requests.get(url)
-                sub_soup = BeautifulSoup(r.text, 'lxml')
-                url = sub_soup.find('div', class_='btn').find('a').get('href')
+                if r.url.startswith('http://wap.sogou.com/web/search/'):
+                    sub_soup = BeautifulSoup(r.text, 'lxml')
+                    btn = sub_soup.find('div', class_='btn')
+                    link = btn.find('a')
+                    url = link.get('href')
+                else:
+                    url = r.url
             d = self.get_url_domain(url)
             if d in domain_set:
                 result.append((
