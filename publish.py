@@ -1,16 +1,9 @@
 import os
 import zipfile
 
-mode = input('打包keyword-spider:0/rank-spider:1/sogou-spider:2/sogou-mobile-spider:3？')
-name = ''
-if mode == '0':
-    name = 'keyword-spider'
-elif mode == '1':
-    name = 'rank-spider'
-elif mode == '2':
-    name = 'sogou-spider'
-elif mode == '3':
-    name = 'sogou-mobile-spider'
+name_list = ['keyword-spider', 'rank-spider', 'sogou-spider', 'sogou-mobile-spider']
+mode = input('打包%s？' % '/'.join(['%s:%s' % (name, i) for (i, name) in enumerate(name_list)]))
+name = name_list[int(mode)]
 os.system('pyinstaller -F ./%s/spider.py' % name)
 zipf = zipfile.ZipFile('%s.zip' % name, 'w')
 zipf.write('./%s/config.ini' % name, 'config.ini')

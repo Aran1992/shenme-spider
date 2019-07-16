@@ -97,7 +97,7 @@ def get_page(page, keyword, domain_set):
     global global_url, global_text
     print('开始第%d页' % page)
     # todo 这个网址这样请求就一定能够返回想要的结果吗？
-    # https://m.sm.cn/s?q=%E7%99%BE%E5%BA%A6&page=2&by=next&from=smor&tomode=center&safe=1
+    # http://m.sm.cn/s?q=%E7%99%BE%E5%BA%A6&page=2&by=next&from=smor&tomode=center&safe=1
     params = {
         'q': keyword,
         'page': page,
@@ -118,7 +118,7 @@ def get_page(page, keyword, domain_set):
     soup = None
     while r is None or soup is None:
         try:
-            r = requests.get('https://m.sm.cn/s', params=params, headers=headers)
+            r = requests.get('http://m.sm.cn/s', params=params, headers=headers)
         except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
             print('检查到网络断开，%s秒之后尝试重新抓取' % TIMEOUT)
             time.sleep(TIMEOUT)

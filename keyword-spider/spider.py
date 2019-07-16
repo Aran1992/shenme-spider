@@ -92,7 +92,7 @@ class SiteSpider:
 
     def get_title(self, domain, page):
         print('开始抓取第%s页' % page)
-        url = 'https://m.sm.cn/s'
+        url = 'http://m.sm.cn/s'
         params = {
             'q': 'site:%s' % domain,
             'page': page,
