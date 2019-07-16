@@ -115,7 +115,7 @@ class Spider:
 
     def get_page(self, page, keyword, domain_set):
         print('开始第%d页' % page)
-        # https://wap.sogou.com/web/search/ajax_query.jsp?type=1&uID=AAEoNfGfKAAAAAqPLE5KcQAA1wA=&v=5&dp=1&pid=sogou-waps-7880d7226e872b77&rcer=hNz_aRIBWIwCGa7H&keyword=%E6%97%85%E6%B3%95%E5%B8%88%E8%90%A5%E5%9C%B0&suuid=f62fab99-2cd6-4d62-a9d1-8b400c6729d4&p=2&s_from=pagenext&showextquery=1&IPLOC=&insite=
+        # http://wap.sogou.com/web/search/ajax_query.jsp?type=1&uID=AAEoNfGfKAAAAAqPLE5KcQAA1wA=&v=5&dp=1&pid=sogou-waps-7880d7226e872b77&rcer=hNz_aRIBWIwCGa7H&keyword=%E6%97%85%E6%B3%95%E5%B8%88%E8%90%A5%E5%9C%B0&suuid=f62fab99-2cd6-4d62-a9d1-8b400c6729d4&p=2&s_from=pagenext&showextquery=1&IPLOC=&insite=
         params = {
             'keyword': keyword,
             'p': page,
@@ -133,9 +133,8 @@ class Spider:
                 continue
             if not url.startswith('http'):
                 url = urljoin(r.url, url)
-                r = requests.get(url)
+                (r, sub_soup) = self.save_request(url)
                 if r.url.startswith('http://wap.sogou.com/web/search/'):
-                    sub_soup = BeautifulSoup(r.text, 'lxml')
                     btn = sub_soup.find('div', class_='btn')
                     link = btn.find('a')
                     url = link.get('href')
@@ -172,7 +171,7 @@ class Spider:
             ws.append((domain, keyword, '搜狗MOBILE', rank, url, title, date_time))
         wb.save(self.file_name)
 
-    def save_request(self, url, *, params, headers):
+    def save_request(self, url, *, params=None, headers=None):
         r = None
         soup = None
         while r is None or soup is None:
