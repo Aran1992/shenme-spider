@@ -47,13 +47,13 @@ class Spider(metaclass=ABCMeta):
         try:
             self.get_mode()
         except MyError as e:
-            print(self.save_result())
+            self.save_result()
             input(e)
         except KeyboardInterrupt:
-            print(self.save_result())
+            self.save_result()
             input('已经强行退出程序')
         except:
-            print(self.save_result())
+            self.save_result()
             filename = 'error-%s.log' % get_cur_time_filename()
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write('''%s
@@ -104,8 +104,7 @@ class Spider(metaclass=ABCMeta):
         print('总共要查找%s关键词，有%s个网站' % (len(keyword_set), len(domain_set)))
         for i, keyword in enumerate(keyword_set):
             self.get_rank(i + 1, keyword, domain_set)
-        filename = self.save_result()
-        print('查询结束，查询结果保存在 %s' % filename)
+        self.save_result()
         end_time = datetime.datetime.now()
         print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
 
@@ -118,14 +117,16 @@ class Spider(metaclass=ABCMeta):
         if file_path == '' or not file_path.endswith('.xlsx'):
             raise MyError('import目录之下没有发现xlsx文件')
         wb = load_workbook(file_path)
-        ws = wb['网址']
+        ws_d = wb['网址']
         d = set()
-        for (domain,) in ws.iter_rows(values_only=True):
-            d.add(domain)
-        ws = wb['关键词']
+        for row in ws_d.iter_rows(values_only=True):
+            if row[0] is not None:
+                d.add(row[0])
+        ws_k = wb['关键词']
         k = set()
-        for (keyword,) in ws.iter_rows(values_only=True):
-            k.add(keyword)
+        for row in ws_k.iter_rows(values_only=True):
+            if row[0] is not None:
+                k.add(row[0])
         return k, d
 
     def get_rank(self, index, keyword, domain_set):
@@ -204,24 +205,25 @@ class Spider(metaclass=ABCMeta):
             ws.append((domain, keyword, self.engine_name, rank, url, title, date_time))
         wb.save(file_name)
         self.result = []
+        print('查询结束，查询结果保存在 %s' % file_name)
         self.save_un_searched()
-        return file_name
 
     def save_un_searched(self):
         file_name = '未查找关键词-%s.xlsx' % get_cur_time_filename()
         wb = Workbook()
-        ws1 = wb.active
-        ws1.title = '关键词'
+        ws_k = wb.active
+        ws_k.title = '关键词'
         keywords = []
         for keyword in self.keyword_set:
             if keyword not in self.searched_keywords:
                 keywords.append(keyword)
         for keyword in keywords:
-            ws1.append((keyword,))
-        ws2 = wb.create_sheet(title='网址')
+            ws_k.append((keyword,))
+        ws_d = wb.create_sheet(title='网址')
         for domain in self.domain_set:
-            ws2.append((domain,))
+            ws_d.append((domain,))
         wb.save(file_name)
+        print('未查询结果保存在 %s' % file_name)
 
     def safe_request(self, url, *, params=None, headers=None):
         r = None
