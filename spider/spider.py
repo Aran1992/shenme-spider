@@ -3,8 +3,8 @@ from bs4 import BeautifulSoup, Comment
 from openpyxl import load_workbook, Workbook
 import os
 import time
-import datetime
 import traceback
+from datetime import datetime
 from configparser import ConfigParser
 from abc import ABCMeta, abstractmethod
 from urllib.parse import urlparse, urljoin
@@ -78,13 +78,13 @@ class Spider(metaclass=ABCMeta):
                 print('输入了未知模式，请重新输入')
 
     def start(self):
-        now = datetime.datetime.now()
+        now = datetime.now()
         cfg = ConfigParser()
         cfg.read('config.ini')
         hour = int(cfg.get('config', 'hour'))
-        start_time = datetime.datetime(now.year, now.month, now.day, hour)
+        start_time = datetime(now.year, now.month, now.day, hour)
         if start_time <= now:
-            start_time = datetime.datetime.fromtimestamp(start_time.timestamp() + 24 * 60 * 60)
+            start_time = datetime.fromtimestamp(start_time.timestamp() + 24 * 60 * 60)
         wait_time = (start_time - now).total_seconds()
         print('下次查询时间为%s，将在%s后开始' % (start_time, format_cd_time(wait_time)))
         time.sleep(wait_time)
@@ -97,7 +97,7 @@ class Spider(metaclass=ABCMeta):
         self.keyword_set = set()
         self.domain_set = set()
 
-        start_time = datetime.datetime.now()
+        start_time = datetime.now()
         (keyword_set, domain_set) = self.get_input()
         self.keyword_set = keyword_set
         self.domain_set = domain_set
@@ -105,7 +105,7 @@ class Spider(metaclass=ABCMeta):
         for i, keyword in enumerate(keyword_set):
             self.get_rank(i + 1, keyword, domain_set)
         self.save_result()
-        end_time = datetime.datetime.now()
+        end_time = datetime.now()
         print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
 
     def get_input(self):
@@ -142,7 +142,7 @@ class Spider(metaclass=ABCMeta):
         (r, soup) = self.safe_request(self.base_url, params=params, headers=headers)
         (ok, msg) = self.check_url(r.url)
         if not ok:
-            raise (MyError(msg))
+            raise MyError(msg)
         all_item = self.get_all_item(soup)
         result = []
         rank = 1
@@ -157,7 +157,7 @@ class Spider(metaclass=ABCMeta):
                         '%d-%d' % (page, rank),
                         url,
                         self.get_title(item),
-                        datetime.datetime.now()
+                        datetime.now()
                     ))
             rank += 1
         self.result += result
@@ -319,7 +319,7 @@ class SogouMobileSpider(Spider):
 
     @property
     def base_url(self):
-        return 'http://wap.sogou.com/web/search/'
+        return 'http://wap.sogou.com/web/search/ajax_query.jsp'
 
     @property
     def engine_name(self):
@@ -341,7 +341,7 @@ class SogouMobileSpider(Spider):
         elif not url.startswith('http'):
             url = urljoin(self.url, url)
             (r, sub_soup) = self.safe_request(url)
-            if r.url.startswith(self.base_url):
+            if r.url.startswith('http://wap.sogou.com/web/search'):
                 btn = sub_soup.find('div', class_='btn')
                 link = btn.find('a')
                 return link.get('href')
