@@ -33,15 +33,176 @@ class MyError(RuntimeError):
     pass
 
 
+class SpiderRuler(metaclass=ABCMeta):
+    def __init__(self, spider):
+        self.spider = spider
+
+    @property
+    @abstractmethod
+    def user_agent(self):
+        pass
+
+    @property
+    @abstractmethod
+    def base_url(self):
+        pass
+
+    @property
+    @abstractmethod
+    def engine_name(self):
+        pass
+
+    @abstractmethod
+    def get_params(self, keyword, page):
+        pass
+
+    def check_url(self, url):
+        return True, ''
+
+    @abstractmethod
+    def get_all_item(self, soup):
+        pass
+
+    @abstractmethod
+    def get_url(self, item):
+        pass
+
+    @abstractmethod
+    def get_title(self, item):
+        pass
+
+    @abstractmethod
+    def has_next_page(self, soup):
+        pass
+
+
+class SMRuler(SpiderRuler):
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1'
+
+    @property
+    def base_url(self):
+        return 'http://m.sm.cn/s'
+
+    @property
+    def engine_name(self):
+        return '神马'
+
+    def get_params(self, keyword, page):
+        return {
+            'q': keyword,
+            'page': page,
+            'by': 'next',
+            'from': 'smor',
+            'tomode': 'center',
+            'safe': '1',
+        }
+
+    def get_all_item(self, soup):
+        return soup.find_all('div', class_='ali_row')
+
+    def get_url(self, item):
+        link = item.find('a')
+        return link.get('href')
+
+    def get_title(self, item):
+        return ''.join(item.find('a').findAll(text=True))
+
+    def has_next_page(self, soup):
+        return soup.find('a', class_='next')
+
+
+class SogouPCRuler(SpiderRuler):
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+
+    @property
+    def base_url(self):
+        return 'http://www.sogou.com/web'
+
+    @property
+    def engine_name(self):
+        return '搜狗PC'
+
+    def get_params(self, keyword, page):
+        return {
+            'query': keyword,
+            'page': page,
+        }
+
+    def check_url(self, url):
+        if url.startswith('http://www.sogou.com/antispider'):
+            return False, '该IP已经被搜狗引擎封禁'
+        return True, ''
+
+    def get_all_item(self, soup):
+        return soup.find('div', class_='results').find_all('div', recursive=False)
+
+    def get_url(self, item):
+        link = item.find('a')
+        return link.get('href')
+
+    def get_title(self, item):
+        return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
+
+    def has_next_page(self, soup):
+        return soup.find(id='sogou_next')
+
+
+class SogouMobileRuler(SpiderRuler):
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
+
+    @property
+    def base_url(self):
+        return 'http://wap.sogou.com/web/search/ajax_query.jsp'
+
+    @property
+    def engine_name(self):
+        return '搜狗MOBILE'
+
+    def get_params(self, keyword, page):
+        return {
+            'keyword': keyword,
+            'p': page,
+        }
+
+    def get_all_item(self, soup):
+        return soup.find_all('a', class_='resultLink')
+
+    def get_url(self, item):
+        url = item.get('href')
+        if url.startswith('javascript'):
+            return None
+        elif url.startswith('http'):
+            return url
+        else:
+            url = urljoin(self.spider.url, url)
+            (r, sub_soup) = self.spider.safe_request(url)
+            if r.url.startswith('http://wap.sogou.com/web/search'):
+                btn = sub_soup.find('div', class_='btn')
+                link = btn.find('a')
+                return link.get('href')
+            else:
+                return r.url
+
+    def get_title(self, item):
+        return ''.join(item.findAll(text=lambda text: not isinstance(text, Comment)))
+
+    def has_next_page(self, soup):
+        li = soup.find('p').find(text=True).strip().split(',')
+        return int(li[0]) > int(li[1])
+
+
 class Spider(metaclass=ABCMeta):
-    def __init__(self):
+    def __init__(self, ruler_class):
+        self.ruler = ruler_class(self)
         self.url = ''
         self.text = ''
         self.result = []
-        self.searched_keywords = []
-        self.keyword_set = set()
-        self.domain_set = set()
-        self.main()
 
     def main(self):
         try:
@@ -91,6 +252,40 @@ class Spider(metaclass=ABCMeta):
         self.search()
         self.start()
 
+    @abstractmethod
+    def search(self):
+        pass
+
+    @abstractmethod
+    def save_result(self):
+        pass
+
+    def safe_request(self, url, *, params=None, headers=None):
+        r = None
+        soup = None
+        while r is None or soup is None:
+            try:
+                r = requests.get(url, params=params, headers=headers)
+            except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
+                print('检查到网络断开，%s秒之后尝试重新抓取' % TIMEOUT)
+                time.sleep(TIMEOUT)
+                continue
+            self.url = r.url
+            self.text = r.text
+            soup = BeautifulSoup(r.text, 'lxml')
+            if soup.body is None:
+                raise MyError('请求到的页面的内容为空，为防止IP被封禁，已退出程序')
+        return r, soup
+
+
+class RankSpider(Spider):
+    def __init__(self, ruler_class):
+        Spider.__init__(self, ruler_class)
+        self.keyword_set = set()
+        self.domain_set = set()
+        self.searched_keywords = []
+        self.main()
+
     def search(self):
         self.result = []
         self.searched_keywords = []
@@ -137,64 +332,28 @@ class Spider(metaclass=ABCMeta):
 
     def get_page(self, page, keyword, domain_set):
         print('开始第%d页' % page)
-        params = self.get_params(keyword, page)
-        headers = {'User-Agent': self.user_agent}
-        (r, soup) = self.safe_request(self.base_url, params=params, headers=headers)
-        (ok, msg) = self.check_url(r.url)
+        params = self.ruler.get_params(keyword, page)
+        headers = {'User-Agent': self.ruler.user_agent}
+        (r, soup) = self.safe_request(self.ruler.base_url, params=params, headers=headers)
+        (ok, msg) = self.ruler.check_url(r.url)
         if not ok:
             raise MyError(msg)
-        all_item = self.get_all_item(soup)
-        result = []
+        all_item = self.ruler.get_all_item(soup)
         rank = 1
         for item in all_item:
-            url = self.get_url(item)
+            url = self.ruler.get_url(item)
             if url is not None:
                 domain = get_url_domain(url)
                 if domain in domain_set:
-                    result.append((
+                    self.result.append((
                         domain,
                         keyword,
                         '%d-%d' % (page, rank),
                         url,
-                        self.get_title(item),
+                        self.ruler.get_title(item),
                         datetime.now()
                     ))
             rank += 1
-        self.result += result
-
-    @property
-    @abstractmethod
-    def user_agent(self):
-        pass
-
-    @property
-    @abstractmethod
-    def base_url(self):
-        pass
-
-    @property
-    @abstractmethod
-    def engine_name(self):
-        pass
-
-    @abstractmethod
-    def get_params(self, keyword, page):
-        pass
-
-    def check_url(self, url):
-        return True, ''
-
-    @abstractmethod
-    def get_all_item(self, soup):
-        pass
-
-    @abstractmethod
-    def get_url(self, item):
-        pass
-
-    @abstractmethod
-    def get_title(self, item):
-        pass
 
     def save_result(self):
         file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
@@ -202,7 +361,7 @@ class Spider(metaclass=ABCMeta):
         ws = wb.active
         ws.append(('域名', '关键词', '搜索引擎', '排名', '真实地址', '标题', '查询时间'))
         for (domain, keyword, rank, url, title, date_time) in self.result:
-            ws.append((domain, keyword, self.engine_name, rank, url, title, date_time))
+            ws.append((domain, keyword, self.ruler.engine_name, rank, url, title, date_time))
         wb.save(file_name)
         self.result = []
         print('查询结束，查询结果保存在 %s' % file_name)
@@ -225,140 +384,68 @@ class Spider(metaclass=ABCMeta):
         wb.save(file_name)
         print('未查询结果保存在 %s' % file_name)
 
-    def safe_request(self, url, *, params=None, headers=None):
-        r = None
-        soup = None
-        while r is None or soup is None:
-            try:
-                r = requests.get(url, params=params, headers=headers)
-            except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
-                print('检查到网络断开，%s秒之后尝试重新抓取' % TIMEOUT)
-                time.sleep(TIMEOUT)
-                continue
-            self.url = r.url
-            self.text = r.text
-            soup = BeautifulSoup(r.text, 'lxml')
-            if soup.body is None:
-                raise MyError('请求到的页面的内容为空，为防止IP被封禁，已退出程序')
-        return r, soup
 
+class SiteSpider(Spider):
+    def __init__(self, ruler_class):
+        Spider.__init__(self, ruler_class)
+        self.domain = ''
+        self.main()
 
-class SMSpider(Spider):
-    @property
-    def user_agent(self):
-        return 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1'
+    def search(self):
+        self.result = []
+        start_time = datetime.now()
+        self.get_input()
+        print('本次查找的域名为 %s' % self.domain)
+        page = 1
+        soup = self.get_page(self.domain, page)
+        while soup and self.ruler.has_next_page(soup):
+            page += 1
+            soup = self.get_page(self.domain, page)
+        self.save_result()
+        end_time = datetime.now()
+        print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
 
-    @property
-    def base_url(self):
-        return 'http://m.sm.cn/s'
+    def get_input(self):
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.domain = cfg.get('config', 'domain')
 
-    @property
-    def engine_name(self):
-        return '神马'
+    def get_page(self, domain, page):
+        print('开始第%d页' % page)
+        params = self.ruler.get_params('site:%s' % domain, page)
+        headers = {'User-Agent': self.ruler.user_agent}
+        (r, soup) = self.safe_request(self.ruler.base_url, params=params, headers=headers)
+        print(r.url)
+        with open('test%s.html' % page, 'w', encoding='utf-8')as f:
+            f.write(soup.prettify())
+        (ok, msg) = self.ruler.check_url(r.url)
+        if not ok:
+            raise MyError(msg)
+        all_item = self.ruler.get_all_item(soup)
+        for item in all_item:
+            self.result.append(self.ruler.get_title(item))
+        return soup
 
-    def get_params(self, keyword, page):
-        return {
-            'q': keyword,
-            'page': page,
-            'by': 'next',
-            'from': 'smor',
-            'tomode': 'center',
-            'safe': '1',
-        }
-
-    def get_all_item(self, soup):
-        return soup.find_all('div', class_='ali_row')
-
-    def get_url(self, item):
-        link = item.find('a')
-        return link.get('href')
-
-    def get_title(self, item):
-        return ''.join(item.find('a').findAll(text=True))
-
-
-class SogouPCSpider(Spider):
-    @property
-    def user_agent(self):
-        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
-
-    @property
-    def base_url(self):
-        return 'http://www.sogou.com/web'
-
-    @property
-    def engine_name(self):
-        return '搜狗PC'
-
-    def get_params(self, keyword, page):
-        return {
-            'query': keyword,
-            'page': page,
-        }
-
-    def check_url(self, url):
-        if url.startswith('http://www.sogou.com/antispider'):
-            return False, '该IP已经被搜狗引擎封禁'
-        return True, ''
-
-    def get_all_item(self, soup):
-        return soup.find('div', class_='results').find_all('div', recursive=False)
-
-    def get_url(self, item):
-        link = item.find('a')
-        return link.get('href')
-
-    def get_title(self, item):
-        return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
-
-
-class SogouMobileSpider(Spider):
-    @property
-    def user_agent(self):
-        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
-
-    @property
-    def base_url(self):
-        return 'http://wap.sogou.com/web/search/ajax_query.jsp'
-
-    @property
-    def engine_name(self):
-        return '搜狗MOBILE'
-
-    def get_params(self, keyword, page):
-        return {
-            'keyword': keyword,
-            'p': page,
-        }
-
-    def get_all_item(self, soup):
-        return soup.find_all('a', class_='resultLink')
-
-    def get_url(self, item):
-        url = item.get('href')
-        if url.startswith('javascript'):
-            return None
-        elif not url.startswith('http'):
-            url = urljoin(self.url, url)
-            (r, sub_soup) = self.safe_request(url)
-            if r.url.startswith('http://wap.sogou.com/web/search'):
-                btn = sub_soup.find('div', class_='btn')
-                link = btn.find('a')
-                return link.get('href')
-            else:
-                return r.url
-        else:
-            return url
-
-    def get_title(self, item):
-        return ''.join(item.findAll(text=lambda text: not isinstance(text, Comment)))
+    def save_result(self):
+        wb = Workbook()
+        ws = wb.active
+        for title in self.result:
+            ws.append((title,))
+        self.result = []
+        file_name = '收录标题-%s.xlsx' % get_cur_time_filename()
+        wb.save(file_name)
 
 
 if __name__ == '__main__':
-    spider_list = [(SMSpider, '神马'), (SogouPCSpider, '搜狗PC'), (SogouMobileSpider, '搜狗MOBILE')]
-    spider_index = input('''要运行哪个Spider？
+    spider_list = [(RankSpider, '排名'), (SiteSpider, '收录')]
+    engine_list = [(SMRuler, '神马'), (SogouPCRuler, '搜狗PC'), (SogouMobileRuler, '搜狗MOBILE')]
+    spider_index = input('''要查找什么数据？
 %s
-''' % '\n'.join(['%s 请输入：%s' % (name, i) for (i, (_, name)) in enumerate(spider_list)]))
-    (class_, name) = spider_list[int(spider_index)]
-    os.system('title %s' % name)
-    class_()
+''' % '\n'.join(['%s 请输入：%s' % (ruler_name, i) for (i, (_, ruler_name)) in enumerate(spider_list)]))
+    engine_index = input('''要查找哪个搜索引擎？
+%s
+''' % '\n'.join(['%s 请输入：%s' % (ruler_name, i) for (i, (_, ruler_name)) in enumerate(engine_list)]))
+    (spider_class, spider_name) = spider_list[int(spider_index)]
+    (ruler_class, ruler_name) = engine_list[int(engine_index)]
+    os.system('title %s%s' % (ruler_name, spider_name))
+    spider_class(ruler_class)
