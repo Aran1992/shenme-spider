@@ -203,6 +203,7 @@ class Spider(metaclass=ABCMeta):
         self.url = ''
         self.text = ''
         self.result = []
+        self.started = False
 
     def main(self):
         try:
@@ -287,6 +288,7 @@ class RankSpider(Spider):
         self.main()
 
     def search(self):
+        self.started = True
         self.result = []
         self.searched_keywords = []
         self.keyword_set = set()
@@ -302,6 +304,7 @@ class RankSpider(Spider):
         self.save_result()
         end_time = datetime.now()
         print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
+        self.started = False
 
     def get_input(self):
         file_path = ''
@@ -356,6 +359,8 @@ class RankSpider(Spider):
             rank += 1
 
     def save_result(self):
+        if not self.started:
+            return
         file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
         wb = Workbook()
         ws = wb.active
@@ -392,6 +397,7 @@ class SiteSpider(Spider):
         self.main()
 
     def search(self):
+        self.started = True
         self.result = []
         start_time = datetime.now()
         self.get_input()
@@ -404,6 +410,7 @@ class SiteSpider(Spider):
         self.save_result()
         end_time = datetime.now()
         print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
+        self.started = False
 
     def get_input(self):
         cfg = ConfigParser()
@@ -415,9 +422,6 @@ class SiteSpider(Spider):
         params = self.ruler.get_params('site:%s' % domain, page)
         headers = {'User-Agent': self.ruler.user_agent}
         (r, soup) = self.safe_request(self.ruler.base_url, params=params, headers=headers)
-        print(r.url)
-        with open('test%s.html' % page, 'w', encoding='utf-8')as f:
-            f.write(soup.prettify())
         (ok, msg) = self.ruler.check_url(r.url)
         if not ok:
             raise MyError(msg)
@@ -427,6 +431,8 @@ class SiteSpider(Spider):
         return soup
 
     def save_result(self):
+        if not self.started:
+            return
         wb = Workbook()
         ws = wb.active
         for title in self.result:
