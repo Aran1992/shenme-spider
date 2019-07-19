@@ -79,11 +79,11 @@ class SpiderRuler(metaclass=ABCMeta):
 class SMRuler(SpiderRuler):
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1'
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36'
 
     @property
     def base_url(self):
-        return 'http://m.sm.cn/s'
+        return 'https://m.sm.cn/s'
 
     @property
     def engine_name(self):
@@ -315,16 +315,14 @@ class RankSpider(Spider):
         if file_path == '' or not file_path.endswith('.xlsx'):
             raise MyError('import目录之下没有发现xlsx文件')
         wb = load_workbook(file_path)
-        ws_d = wb['网址']
+        ws = wb.active
         d = set()
-        for row in ws_d.iter_rows(values_only=True):
+        k = set()
+        for row in ws.iter_rows(min_row=2, values_only=True):
             if row[0] is not None:
                 d.add(row[0])
-        ws_k = wb['关键词']
-        k = set()
-        for row in ws_k.iter_rows(values_only=True):
-            if row[0] is not None:
-                k.add(row[0])
+            if row[1] is not None:
+                k.add(row[1])
         return k, d
 
     def get_rank(self, index, keyword, domain_set):
@@ -373,21 +371,18 @@ class RankSpider(Spider):
         self.save_un_searched()
 
     def save_un_searched(self):
-        file_name = '未查找关键词-%s.xlsx' % get_cur_time_filename()
-        wb = Workbook()
-        ws_k = wb.active
-        ws_k.title = '关键词'
-        keywords = []
+        un_searched_keywords = []
         for keyword in self.keyword_set:
             if keyword not in self.searched_keywords:
-                keywords.append(keyword)
-        for keyword in keywords:
-            ws_k.append((keyword,))
-        ws_d = wb.create_sheet(title='网址')
-        for domain in self.domain_set:
-            ws_d.append((domain,))
-        wb.save(file_name)
-        print('未查询结果保存在 %s' % file_name)
+                un_searched_keywords.append(keyword)
+        if len(un_searched_keywords) != 0:
+            file_name = '未查找关键词-%s.xlsx' % get_cur_time_filename()
+            wb = Workbook()
+            ws = wb.active
+            for keyword in un_searched_keywords:
+                ws.append((keyword,))
+            wb.save(file_name)
+            print('未查询结果保存在 %s' % file_name)
 
 
 class SiteSpider(Spider):
