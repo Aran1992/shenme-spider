@@ -52,6 +52,11 @@ class SpiderRuler(metaclass=ABCMeta):
     def engine_name(self):
         pass
 
+    @property
+    @abstractmethod
+    def request_interval_time(self):
+        pass
+
     @abstractmethod
     def get_params(self, keyword, page):
         pass
@@ -77,6 +82,16 @@ class SpiderRuler(metaclass=ABCMeta):
 
 
 class SMRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', 'sm_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
     @property
     def user_agent(self):
         return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36'
@@ -114,6 +129,16 @@ class SMRuler(SpiderRuler):
 
 
 class SogouPCRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', 'sgpc_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
     @property
     def user_agent(self):
         return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
@@ -152,6 +177,16 @@ class SogouPCRuler(SpiderRuler):
 
 
 class SogouMobileRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', 'sgmobile_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
     @property
     def user_agent(self):
         return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
@@ -204,6 +239,7 @@ class Spider(metaclass=ABCMeta):
         self.text = ''
         self.result = []
         self.started = False
+        self.last_request_time = datetime.now()
 
     def main(self):
         try:
@@ -262,6 +298,10 @@ class Spider(metaclass=ABCMeta):
         pass
 
     def safe_request(self, url, *, params=None, headers=None):
+        cur = datetime.now()
+        passed = (cur - self.last_request_time).total_seconds()
+        if passed < self.ruler.request_interval_time:
+            time.sleep(self.ruler.request_interval_time - passed)
         r = None
         soup = None
         while r is None or soup is None:
