@@ -10,7 +10,6 @@ from abc import ABCMeta, abstractmethod
 from urllib.parse import urlparse, urljoin
 
 PAGE = 10
-TIMEOUT = 1
 
 
 def get_cur_time_filename():
@@ -244,6 +243,10 @@ class Spider(metaclass=ABCMeta):
         self.result = []
         self.started = False
         self.last_request_time = datetime.now()
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.reconnect_interval_time = float(cfg.get('config', 'reconnect_interval_time'))
+        self.error_interval_time = float(cfg.get('config', 'error_interval_time'))
 
     def main(self):
         try:
@@ -312,14 +315,22 @@ class Spider(metaclass=ABCMeta):
             try:
                 r = requests.get(url, params=params, headers=headers)
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
-                print('检查到网络断开，%s秒之后尝试重新抓取' % TIMEOUT)
-                time.sleep(TIMEOUT)
+                print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
+                time.sleep(self.reconnect_interval_time)
+                continue
+            (ok, msg) = self.ruler.check_url(r.url)
+            if not ok:
+                print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
+                time.sleep(self.error_interval_time)
                 continue
             self.url = r.url
             self.text = r.text
             soup = BeautifulSoup(r.text, 'lxml')
             if soup.body is None:
-                raise MyError('请求到的页面的内容为空，为防止IP被封禁，已退出程序')
+                print('请求到的页面的内容为空，为防止IP被封禁，%s秒之后尝试重新抓取' % self.error_interval_time)
+                time.sleep(self.error_interval_time)
+                continue
+        self.last_request_time = datetime.now()
         return r, soup
 
 
@@ -380,9 +391,6 @@ class RankSpider(Spider):
         params = self.ruler.get_params(keyword, page)
         headers = {'User-Agent': self.ruler.user_agent}
         (r, soup) = self.safe_request(self.ruler.base_url, params=params, headers=headers)
-        (ok, msg) = self.ruler.check_url(r.url)
-        if not ok:
-            raise MyError(msg)
         all_item = self.ruler.get_all_item(soup)
         rank = 1
         for item in all_item:
@@ -461,9 +469,6 @@ class SiteSpider(Spider):
         params = self.ruler.get_params('site:%s' % domain, page)
         headers = {'User-Agent': self.ruler.user_agent}
         (r, soup) = self.safe_request(self.ruler.base_url, params=params, headers=headers)
-        (ok, msg) = self.ruler.check_url(r.url)
-        if not ok:
-            raise MyError(msg)
         all_item = self.ruler.get_all_item(soup)
         for item in all_item:
             self.result.append(self.ruler.get_title(item))
