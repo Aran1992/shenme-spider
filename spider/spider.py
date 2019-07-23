@@ -219,7 +219,11 @@ class SogouMobileRuler(SpiderRuler):
             (r, sub_soup) = self.spider.safe_request(url)
             if r.url.startswith('http://wap.sogou.com/web/search'):
                 btn = sub_soup.find('div', class_='btn')
-                link = btn.find('a')
+                if btn:
+                    link = btn.find('a')
+                else:
+                    # 个别情况下 会发生页面里面没有class为btn的div的情况
+                    link = sub_soup.find('a')
                 return link.get('href')
             else:
                 return r.url
