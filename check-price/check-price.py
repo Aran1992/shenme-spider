@@ -1,6 +1,7 @@
 from openpyxl import load_workbook, Workbook
 import os
 import time
+import traceback
 
 
 def get_cur_time_filename():
@@ -59,4 +60,9 @@ class Check:
 
 
 if __name__ == '__main__':
-    Check()
+    try:
+        Check()
+    except:
+        with open('error-%s.log' % get_cur_time_filename(), 'w', encoding='utf-8') as f:
+            f.write(traceback.format_exc())
+            input('请将最新的error.log文件发给技术人员')
