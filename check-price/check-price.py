@@ -34,7 +34,9 @@ class Check:
             total_price = total_price + check_price
             ws.append((index, keyword, domain, exponent, price3, price5, rank, charge, check_rank, check_price))
         ws.append((None, None, None, None, None, None, None, None, None, total_price))
-        wb.save('核对结果-%s.xlsx' % get_cur_time_filename())
+        file_name = '核对结果-%s.xlsx' % get_cur_time_filename()
+        wb.save(file_name)
+        input('核对完毕，核对结果保存在%s' % file_name)
 
     def load_workbook(self, import_dir):
         file_path = ''
