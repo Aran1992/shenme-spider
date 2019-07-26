@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup, Comment
 from openpyxl import load_workbook, Workbook
+import re
 import os
 import time
 import traceback
@@ -93,7 +94,7 @@ class SMRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36'
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
 
     @property
     def base_url(self):
@@ -235,6 +236,119 @@ class SogouMobileRuler(SpiderRuler):
         return int(li[0]) > int(li[1])
 
 
+class BaiduPCRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', 'bdpc_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+
+    @property
+    def base_url(self):
+        return 'http://www.baidu.com/s'
+
+    @property
+    def engine_name(self):
+        return '百度PC'
+
+    def get_params(self, keyword, page):
+        return {
+            'wd': keyword,
+            'pn': (page - 1) * 10,
+        }
+
+    def get_all_item(self, soup):
+        div_root = soup.find('div', id='content_left')
+        if div_root:
+            return div_root.find_all('div', recursive=False, id=lambda id_: id_ != 'rs_top_new')
+        else:
+            return []
+
+    def get_url(self, item):
+        link = item.find('a')
+        url = link.get('href')
+        if url.startswith('javascript'):
+            return None
+        elif url.startswith('http://www.baidu.com/link?'):
+            (r, _) = self.spider.safe_request(url)
+            return r.url
+        else:
+            return url
+
+    def get_title(self, item):
+        return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
+
+    def has_next_page(self, soup):
+        return soup.find('a', text='下一页')
+
+
+class BaiduMobileRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', 'bdmobile_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
+
+    @property
+    def base_url(self):
+        return 'http://m.baidu.com/s'
+
+    @property
+    def engine_name(self):
+        return '百度MOBILE'
+
+    def get_params(self, keyword, page):
+        return {
+            'word': keyword,
+            'pn': (page - 1) * 10,
+        }
+
+    def get_all_item(self, soup):
+        div_root = soup.find('div', id='results')
+        if div_root:
+            return div_root.find_all('div', recursive=False)
+        else:
+            return []
+
+    def get_url(self, item):
+        link = item.find('a')
+        url = link.get('href')
+        if url.startswith('javascript'):
+            return None
+        elif url.startswith('https://m.baidu.com'):
+            (r, sub_soup) = self.spider.safe_request(url)
+            match = re.search(r'window\.location\.replace\(".*?"\)', r.text)
+            if match:
+                (s, e) = match.span()
+                return r.text[s + len('window.location.replace("'):e - len('")')]
+            else:
+                return r.url
+        else:
+            return url
+
+    def get_title(self, item):
+        return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
+
+    def has_next_page(self, soup):
+        return soup.find('div', class_='new-pagenav-right')
+
+
 class Spider(metaclass=ABCMeta):
     def __init__(self, ruler_class):
         self.ruler = ruler_class(self)
@@ -304,7 +418,7 @@ class Spider(metaclass=ABCMeta):
     def save_result(self):
         pass
 
-    def safe_request(self, url, *, params=None, headers=None):
+    def safe_request(self, url, *, params=None):
         cur = datetime.now()
         passed = (cur - self.last_request_time).total_seconds()
         if passed < self.ruler.request_interval_time:
@@ -313,6 +427,7 @@ class Spider(metaclass=ABCMeta):
         soup = None
         while r is None or soup is None:
             try:
+                headers = {'User-Agent': self.ruler.user_agent}
                 r = requests.get(url, params=params, headers=headers)
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
@@ -389,8 +504,7 @@ class RankSpider(Spider):
     def get_page(self, page, keyword, domain_set):
         print('开始第%d页' % page)
         params = self.ruler.get_params(keyword, page)
-        headers = {'User-Agent': self.ruler.user_agent}
-        (r, soup) = self.safe_request(self.ruler.base_url, params=params, headers=headers)
+        (r, soup) = self.safe_request(self.ruler.base_url, params=params)
         all_item = self.ruler.get_all_item(soup)
         rank = 1
         for item in all_item:
@@ -467,8 +581,7 @@ class SiteSpider(Spider):
     def get_page(self, domain, page):
         print('开始第%d页' % page)
         params = self.ruler.get_params('site:%s' % domain, page)
-        headers = {'User-Agent': self.ruler.user_agent}
-        (r, soup) = self.safe_request(self.ruler.base_url, params=params, headers=headers)
+        (r, soup) = self.safe_request(self.ruler.base_url, params=params)
         all_item = self.ruler.get_all_item(soup)
         for item in all_item:
             self.result.append(self.ruler.get_title(item))
@@ -488,7 +601,13 @@ class SiteSpider(Spider):
 
 if __name__ == '__main__':
     spider_list = [(RankSpider, '排名'), (SiteSpider, '收录')]
-    engine_list = [(SMRuler, '神马'), (SogouPCRuler, '搜狗PC'), (SogouMobileRuler, '搜狗MOBILE')]
+    engine_list = [
+        (SMRuler, '神马'),
+        (SogouPCRuler, '搜狗PC'),
+        (SogouMobileRuler, '搜狗MOBILE'),
+        (BaiduPCRuler, '百度PC'),
+        (BaiduMobileRuler, '百度MOBILE')
+    ]
     spider_index = input('''要查找什么数据？
 %s
 ''' % '\n'.join(['%s 请输入：%s' % (ruler_name, i) for (i, (_, ruler_name)) in enumerate(spider_list)]))
