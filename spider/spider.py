@@ -349,6 +349,49 @@ class BaiduMobileRuler(SpiderRuler):
         return soup.find('div', class_='new-pagenav-right')
 
 
+class LittleRankSpider:
+    def __init__(self, spider):
+        self.spider = spider
+
+    def get_ranks(self, ruler, keywords, domains, page):
+        result = []
+        searched_keywords = []
+        for i, keyword in enumerate(keywords):
+            result += self.get_rank(ruler, i + 1, keyword, domains, page)
+            searched_keywords.append(keyword)
+        return result
+
+    def get_rank(self, ruler, index, keyword, domain_set, page):
+        print('开始抓取第%s个关键词：%s' % (index, keyword))
+        result = []
+        for i in range(page):
+            result += self.get_page(ruler, i + 1, keyword, domain_set)
+        return result
+
+    def get_page(self, ruler, page, keyword, domain_set):
+        print('开始第%d页' % page)
+        result = []
+        params = ruler.get_params(keyword, page)
+        (r, soup) = self.spider.safe_request(ruler.base_url, params=params)
+        all_item = ruler.get_all_item(soup)
+        rank = 1
+        for item in all_item:
+            url = ruler.get_url(item)
+            if url is not None:
+                domain = get_url_domain(url)
+                if domain in domain_set:
+                    result.append((
+                        domain,
+                        keyword,
+                        '%d-%d' % (page, rank),
+                        url,
+                        ruler.get_title(item),
+                        datetime.now()
+                    ))
+            rank += 1
+        return result
+
+
 class Spider(metaclass=ABCMeta):
     def __init__(self, ruler_class):
         self.ruler = ruler_class(self)
@@ -599,8 +642,91 @@ class SiteSpider(Spider):
         wb.save(file_name)
 
 
+class CheckSpider(Spider):
+    def __init__(self, ruler_class):
+        Spider.__init__(self, ruler_class)
+        print('self.main')
+        self.main()
+
+    def search(self):
+        self.started = True
+        start_time = datetime.now()
+        prices = self.get_input()
+        (keywords, domains) = self.get_keywords_domains(prices)
+        ranks = self.get_ranks(self.ruler, keywords, domains)
+        self.check_price(prices, ranks)
+        end_time = datetime.now()
+        print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
+        self.started = False
+
+    def save_result(self):
+        print('核对程序中途退出的话，不会导出已经查询到的结果')
+
+    def get_input(self):
+        file_path = ''
+        import_dir = '报价'
+        path = '.\\%s' % import_dir
+        for file in os.listdir(path):
+            file_path = os.path.join(path, file)
+            break
+        if file_path == '' or not file_path.endswith('.xlsx'):
+            raise MyError('%s目录之下没有发现xlsx文件' % import_dir)
+        wb = load_workbook(file_path)
+        return wb.active
+
+    def get_keywords_domains(self, prices):
+        keywords = set()
+        domains = set()
+        for (index, keyword, domain, exponent, price3, price5, rank, charge) \
+                in prices.iter_rows(min_row=2, values_only=True):
+            keywords.add(keyword)
+            domains.add(domain)
+        return keywords, domains
+
+    def get_ranks(self, ruler, keywords, domains):
+        results = LittleRankSpider(self).get_ranks(ruler, keywords, domains, 1)
+        ranks = {}
+        for (domain, keyword, rank, _, _, _) in results:
+            if keyword not in ranks.keys():
+                ranks[keyword] = {}
+            li = rank.split('-')
+            rank = (int(li[0]) - 1) * 10 + int(li[1])
+            if domain not in ranks[keyword].keys() \
+                    or rank < ranks[keyword][domain]:
+                ranks[keyword][domain] = rank
+        return ranks
+
+    def check_price(self, prices, ranks):
+        total_price = 0
+        wb = Workbook()
+        ws = wb.active
+        ws.append(('序号', '关键词', '网址', '指数', '前三名价格', '四、五名价格', '当前排名', '今日收费', '核对排名', '核对收费'))
+        for (index, keyword, domain, exponent, price3, price5, rank, charge) \
+                in prices.iter_rows(min_row=2, values_only=True):
+            check_rank = self.get_rank(ranks, keyword, domain)
+            print('check_rank', check_rank)
+            check_price = self.get_price(check_rank, price3, price5)
+            total_price = total_price + check_price
+            ws.append((index, keyword, domain, exponent, price3, price5, rank, charge, check_rank, check_price))
+        ws.append((None, None, None, None, None, None, None, None, '核对总价', total_price))
+        file_name = '核对结果-%s.xlsx' % get_cur_time_filename()
+        wb.save(file_name)
+        input('核对完毕，核对结果保存在%s' % file_name)
+
+    def get_rank(self, ranks, keyword, domain):
+        return ranks.get(keyword, {}).get(domain, 0)
+
+    def get_price(self, rank, price3, price5):
+        if rank <= 0 or rank > 5:
+            return 0
+        if rank <= 3:
+            return price3
+        if rank <= 5:
+            return price5
+
+
 if __name__ == '__main__':
-    spider_list = [(RankSpider, '排名'), (SiteSpider, '收录')]
+    spider_list = [(RankSpider, '排名'), (SiteSpider, '收录'), (CheckSpider, '核对')]
     engine_list = [
         (SMRuler, '神马'),
         (SogouPCRuler, '搜狗PC'),
@@ -617,4 +743,6 @@ if __name__ == '__main__':
     (spider_class, spider_name) = spider_list[int(spider_index)]
     (ruler_class, ruler_name) = engine_list[int(engine_index)]
     os.system('title %s%s' % (ruler_name, spider_name))
+    print('spider_class', spider_class)
+    print('ruler_class', ruler_class)
     spider_class(ruler_class)
