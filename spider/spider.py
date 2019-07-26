@@ -328,19 +328,22 @@ class BaiduMobileRuler(SpiderRuler):
 
     def get_url(self, item):
         link = item.find('a')
-        url = link.get('href')
-        if url.startswith('javascript'):
-            return None
-        elif url.startswith('https://m.baidu.com'):
-            (r, sub_soup) = self.spider.safe_request(url)
-            match = re.search(r'window\.location\.replace\(".*?"\)', r.text)
-            if match:
-                (s, e) = match.span()
-                return r.text[s + len('window.location.replace("'):e - len('")')]
+        if link:
+            url = link.get('href')
+            if url.startswith('javascript'):
+                return None
+            elif url.startswith('https://m.baidu.com'):
+                (r, sub_soup) = self.spider.safe_request(url)
+                match = re.search(r'window\.location\.replace\(".*?"\)', r.text)
+                if match:
+                    (s, e) = match.span()
+                    return r.text[s + len('window.location.replace("'):e - len('")')]
+                else:
+                    return r.url
             else:
-                return r.url
+                return url
         else:
-            return url
+            return None
 
     def get_title(self, item):
         return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
@@ -645,7 +648,6 @@ class SiteSpider(Spider):
 class CheckSpider(Spider):
     def __init__(self, ruler_class):
         Spider.__init__(self, ruler_class)
-        print('self.main')
         self.main()
 
     def search(self):
@@ -660,7 +662,7 @@ class CheckSpider(Spider):
         self.started = False
 
     def save_result(self):
-        print('核对程序中途退出的话，不会导出已经查询到的结果')
+        pass
 
     def get_input(self):
         file_path = ''
@@ -743,6 +745,4 @@ if __name__ == '__main__':
     (spider_class, spider_name) = spider_list[int(spider_index)]
     (ruler_class, ruler_name) = engine_list[int(engine_index)]
     os.system('title %s%s' % (ruler_name, spider_name))
-    print('spider_class', spider_class)
-    print('ruler_class', ruler_class)
     spider_class(ruler_class)
