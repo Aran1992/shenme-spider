@@ -141,7 +141,8 @@ class SogouPCRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Safari/537.36'
 
     @property
     def base_url(self):
@@ -189,7 +190,8 @@ class SogouMobileRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
+        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Mobile Safari/537.36'
 
     @property
     def base_url(self):
@@ -249,7 +251,8 @@ class BaiduPCRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Safari/537.36'
 
     @property
     def base_url(self):
@@ -303,7 +306,8 @@ class BaiduMobileRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
+        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Mobile Safari/537.36'
 
     @property
     def base_url(self):
@@ -706,7 +710,6 @@ class CheckSpider(Spider):
         for (index, keyword, domain, exponent, price3, price5, rank, charge) \
                 in prices.iter_rows(min_row=2, values_only=True):
             check_rank = self.get_rank(ranks, keyword, domain)
-            print('check_rank', check_rank)
             check_price = self.get_price(check_rank, price3, price5)
             total_price = total_price + check_price
             ws.append((index, keyword, domain, exponent, price3, price5, rank, charge, check_rank, check_price))
@@ -743,6 +746,6 @@ if __name__ == '__main__':
 %s
 ''' % '\n'.join(['%s 请输入：%s' % (ruler_name, i) for (i, (_, ruler_name)) in enumerate(engine_list)]))
     (spider_class, spider_name) = spider_list[int(spider_index)]
-    (ruler_class, ruler_name) = engine_list[int(engine_index)]
+    (ruler_class_, ruler_name) = engine_list[int(engine_index)]
     os.system('title %s%s' % (ruler_name, spider_name))
-    spider_class(ruler_class)
+    spider_class(ruler_class_)
