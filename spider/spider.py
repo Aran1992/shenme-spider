@@ -281,8 +281,7 @@ class BaiduPCRuler(SpiderRuler):
         if url.startswith('javascript'):
             return None
         elif url.startswith('http://www.baidu.com/link?'):
-            (r, _) = self.spider.safe_request(url)
-            return r.url
+            return self.spider.get_real_url(url)
         else:
             return url
 
@@ -371,6 +370,7 @@ class LittleRankSpider:
         rank = 1
         for item in all_item:
             url = ruler.get_url(item)
+            print('本页第%s条URL为%s' % (rank, url))
             if url is not None:
                 domain = get_url_domain(url)
                 if domain in domain_set:
@@ -484,6 +484,30 @@ class Spider(metaclass=ABCMeta):
                 continue
         self.last_request_time = datetime.now()
         return r, soup
+
+    def get_real_url(self, start_url):
+        cur = datetime.now()
+        passed = (cur - self.last_request_time).total_seconds()
+        if passed < self.ruler.request_interval_time:
+            time.sleep(self.ruler.request_interval_time - passed)
+        r = None
+        final_url = None
+        while r is None:
+            try:
+                headers = {'User-Agent': self.ruler.user_agent}
+                r = requests.head(start_url, headers=headers)
+                final_url = r.headers['Location']
+            except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
+                print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
+                time.sleep(self.reconnect_interval_time)
+                continue
+            (ok, msg) = self.ruler.check_url(final_url)
+            if not ok:
+                print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
+                time.sleep(self.error_interval_time)
+                continue
+        self.last_request_time = datetime.now()
+        return final_url
 
 
 class RankSpider(Spider):
@@ -714,9 +738,9 @@ class CheckSpider(Spider):
         if rank <= 0 or rank > 5:
             return 0
         if rank <= 3:
-            return price3
+            return float(price3)
         if rank <= 5:
-            return price5
+            return float(price5)
 
 
 if __name__ == '__main__':
