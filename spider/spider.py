@@ -1,8 +1,8 @@
 import requests
 from bs4 import BeautifulSoup, Comment
 from openpyxl import load_workbook, Workbook
-import re
 import os
+import ast
 import time
 import traceback
 from datetime import datetime
@@ -256,7 +256,7 @@ class BaiduPCRuler(SpiderRuler):
 
     @property
     def base_url(self):
-        return 'http://www.baidu.com/s'
+        return 'https://www.baidu.com/s'
 
     @property
     def engine_name(self):
@@ -311,7 +311,7 @@ class BaiduMobileRuler(SpiderRuler):
 
     @property
     def base_url(self):
-        return 'http://m.baidu.com/s'
+        return 'https://m.baidu.com/s'
 
     @property
     def engine_name(self):
@@ -331,23 +331,10 @@ class BaiduMobileRuler(SpiderRuler):
             return []
 
     def get_url(self, item):
-        link = item.find('a')
-        if link:
-            url = link.get('href')
-            if url.startswith('javascript'):
-                return None
-            elif url.startswith('https://m.baidu.com'):
-                (r, sub_soup) = self.spider.safe_request(url)
-                match = re.search(r'window\.location\.replace\(".*?"\)', r.text)
-                if match:
-                    (s, e) = match.span()
-                    return r.text[s + len('window.location.replace("'):e - len('")')]
-                else:
-                    return r.url
-            else:
-                return url
-        else:
-            return None
+        data_log_str = item.get('data-log')
+        if data_log_str:
+            data_log = ast.literal_eval(data_log_str)
+            return data_log.get('mu')
 
     def get_title(self, item):
         return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
