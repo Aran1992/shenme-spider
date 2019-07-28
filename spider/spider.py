@@ -672,8 +672,9 @@ class CheckSpider(Spider):
         domains = set()
         for (index, keyword, domain, exponent, price3, price5, rank, charge) \
                 in prices.iter_rows(min_row=2, values_only=True):
-            keywords.add(keyword)
-            domains.add(domain)
+            if index is not None:
+                keywords.add(keyword)
+                domains.add(domain)
         return keywords, domains
 
     def get_ranks(self, ruler, keywords, domains):
@@ -696,10 +697,11 @@ class CheckSpider(Spider):
         ws.append(('序号', '关键词', '网址', '指数', '前三名价格', '四、五名价格', '当前排名', '今日收费', '核对排名', '核对收费'))
         for (index, keyword, domain, exponent, price3, price5, rank, charge) \
                 in prices.iter_rows(min_row=2, values_only=True):
-            check_rank = self.get_rank(ranks, keyword, domain)
-            check_price = self.get_price(check_rank, price3, price5)
-            total_price = total_price + check_price
-            ws.append((index, keyword, domain, exponent, price3, price5, rank, charge, check_rank, check_price))
+            if index is not None:
+                check_rank = self.get_rank(ranks, keyword, domain)
+                check_price = self.get_price(check_rank, price3, price5)
+                total_price = total_price + check_price
+                ws.append((index, keyword, domain, exponent, price3, price5, rank, charge, check_rank, check_price))
         ws.append((None, None, None, None, None, None, None, None, '核对总价', total_price))
         file_name = '核对结果-%s.xlsx' % get_cur_time_filename()
         wb.save(file_name)
