@@ -1,8 +1,8 @@
 import requests
 from bs4 import BeautifulSoup, Comment
 from openpyxl import load_workbook, Workbook
-import re
 import os
+import ast
 import time
 import traceback
 from datetime import datetime
@@ -141,7 +141,8 @@ class SogouPCRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Safari/537.36'
 
     @property
     def base_url(self):
@@ -189,7 +190,8 @@ class SogouMobileRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
+        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Mobile Safari/537.36'
 
     @property
     def base_url(self):
@@ -249,11 +251,12 @@ class BaiduPCRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Safari/537.36'
 
     @property
     def base_url(self):
-        return 'http://www.baidu.com/s'
+        return 'https://www.baidu.com/s'
 
     @property
     def engine_name(self):
@@ -278,8 +281,7 @@ class BaiduPCRuler(SpiderRuler):
         if url.startswith('javascript'):
             return None
         elif url.startswith('http://www.baidu.com/link?'):
-            (r, _) = self.spider.safe_request(url)
-            return r.url
+            return self.spider.get_real_url(url)
         else:
             return url
 
@@ -303,11 +305,12 @@ class BaiduMobileRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Mobile Safari/537.36'
+        return 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Mobile Safari/537.36'
 
     @property
     def base_url(self):
-        return 'http://m.baidu.com/s'
+        return 'https://m.baidu.com/s'
 
     @property
     def engine_name(self):
@@ -327,20 +330,10 @@ class BaiduMobileRuler(SpiderRuler):
             return []
 
     def get_url(self, item):
-        link = item.find('a')
-        url = link.get('href')
-        if url.startswith('javascript'):
-            return None
-        elif url.startswith('https://m.baidu.com'):
-            (r, sub_soup) = self.spider.safe_request(url)
-            match = re.search(r'window\.location\.replace\(".*?"\)', r.text)
-            if match:
-                (s, e) = match.span()
-                return r.text[s + len('window.location.replace("'):e - len('")')]
-            else:
-                return r.url
-        else:
-            return url
+        data_log_str = item.get('data-log')
+        if data_log_str:
+            data_log = ast.literal_eval(data_log_str)
+            return data_log.get('mu')
 
     def get_title(self, item):
         return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
@@ -377,6 +370,7 @@ class LittleRankSpider:
         rank = 1
         for item in all_item:
             url = ruler.get_url(item)
+            print('本页第%s条URL为%s' % (rank, url))
             if url is not None:
                 domain = get_url_domain(url)
                 if domain in domain_set:
@@ -490,6 +484,30 @@ class Spider(metaclass=ABCMeta):
                 continue
         self.last_request_time = datetime.now()
         return r, soup
+
+    def get_real_url(self, start_url):
+        cur = datetime.now()
+        passed = (cur - self.last_request_time).total_seconds()
+        if passed < self.ruler.request_interval_time:
+            time.sleep(self.ruler.request_interval_time - passed)
+        r = None
+        final_url = None
+        while r is None:
+            try:
+                headers = {'User-Agent': self.ruler.user_agent}
+                r = requests.head(start_url, headers=headers)
+                final_url = r.headers['Location']
+            except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
+                print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
+                time.sleep(self.reconnect_interval_time)
+                continue
+            (ok, msg) = self.ruler.check_url(final_url)
+            if not ok:
+                print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
+                time.sleep(self.error_interval_time)
+                continue
+        self.last_request_time = datetime.now()
+        return final_url
 
 
 class RankSpider(Spider):
@@ -645,7 +663,6 @@ class SiteSpider(Spider):
 class CheckSpider(Spider):
     def __init__(self, ruler_class):
         Spider.__init__(self, ruler_class)
-        print('self.main')
         self.main()
 
     def search(self):
@@ -660,7 +677,7 @@ class CheckSpider(Spider):
         self.started = False
 
     def save_result(self):
-        print('核对程序中途退出的话，不会导出已经查询到的结果')
+        pass
 
     def get_input(self):
         file_path = ''
@@ -679,8 +696,9 @@ class CheckSpider(Spider):
         domains = set()
         for (index, keyword, domain, exponent, price3, price5, rank, charge) \
                 in prices.iter_rows(min_row=2, values_only=True):
-            keywords.add(keyword)
-            domains.add(domain)
+            if index is not None:
+                keywords.add(keyword)
+                domains.add(domain)
         return keywords, domains
 
     def get_ranks(self, ruler, keywords, domains):
@@ -703,11 +721,11 @@ class CheckSpider(Spider):
         ws.append(('序号', '关键词', '网址', '指数', '前三名价格', '四、五名价格', '当前排名', '今日收费', '核对排名', '核对收费'))
         for (index, keyword, domain, exponent, price3, price5, rank, charge) \
                 in prices.iter_rows(min_row=2, values_only=True):
-            check_rank = self.get_rank(ranks, keyword, domain)
-            print('check_rank', check_rank)
-            check_price = self.get_price(check_rank, price3, price5)
-            total_price = total_price + check_price
-            ws.append((index, keyword, domain, exponent, price3, price5, rank, charge, check_rank, check_price))
+            if index is not None:
+                check_rank = self.get_rank(ranks, keyword, domain)
+                check_price = self.get_price(check_rank, price3, price5)
+                total_price = total_price + check_price
+                ws.append((index, keyword, domain, exponent, price3, price5, rank, charge, check_rank, check_price))
         ws.append((None, None, None, None, None, None, None, None, '核对总价', total_price))
         file_name = '核对结果-%s.xlsx' % get_cur_time_filename()
         wb.save(file_name)
@@ -720,9 +738,9 @@ class CheckSpider(Spider):
         if rank <= 0 or rank > 5:
             return 0
         if rank <= 3:
-            return price3
+            return float(price3)
         if rank <= 5:
-            return price5
+            return float(price5)
 
 
 if __name__ == '__main__':
@@ -741,8 +759,6 @@ if __name__ == '__main__':
 %s
 ''' % '\n'.join(['%s 请输入：%s' % (ruler_name, i) for (i, (_, ruler_name)) in enumerate(engine_list)]))
     (spider_class, spider_name) = spider_list[int(spider_index)]
-    (ruler_class, ruler_name) = engine_list[int(engine_index)]
+    (ruler_class_, ruler_name) = engine_list[int(engine_index)]
     os.system('title %s%s' % (ruler_name, spider_name))
-    print('spider_class', spider_class)
-    print('ruler_class', ruler_class)
-    spider_class(ruler_class)
+    spider_class(ruler_class_)

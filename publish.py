@@ -8,6 +8,7 @@ if mode == '1':
     zipf = zipfile.ZipFile('%s.zip' % name, 'w')
     zipf.write('./%s/config.ini' % name, 'config.ini')
     zipf.write('./%s/import/input.xlsx' % name, 'import/input.xlsx')
+    zipf.write('./%s/报价/收费方给的表格.xlsx' % name, '报价/收费方给的表格.xlsx')
     zipf.write('./dist/spider.exe', 'spider.exe')
     zipf.close()
 elif mode == '2':
