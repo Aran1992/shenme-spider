@@ -219,7 +219,7 @@ class SogouMobileRuler(SpiderRuler):
         else:
             url = urljoin(self.spider.url, url)
             (r, sub_soup) = self.spider.safe_request(url)
-            if r.url.startswith('http://wap.sogou.com/web/search'):
+            if r.url.startswith('http://wap.sogou.com/transcoding/sweb'):
                 btn = sub_soup.find('div', class_='btn')
                 if btn:
                     link = btn.find('a')
@@ -485,8 +485,6 @@ class Spider(metaclass=ABCMeta):
                 print('请求到的页面的内容为空，为防止IP被封禁，%s秒之后尝试重新抓取' % self.error_interval_time)
                 time.sleep(self.error_interval_time)
                 continue
-            with open('1.html', 'w', encoding='utf-8') as f:
-                f.write(soup.prettify())
         self.last_request_time = datetime.now()
         return r, soup
 
