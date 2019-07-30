@@ -219,7 +219,8 @@ class SogouMobileRuler(SpiderRuler):
         else:
             url = urljoin(self.spider.url, url)
             (r, sub_soup) = self.spider.safe_request(url)
-            if r.url.startswith('http://wap.sogou.com/transcoding/sweb'):
+            if r.url.startswith('http://wap.sogou.com/transcoding/sweb') \
+                    or r.url.startswith('http://m.sogou.com/transcoding/sweb'):
                 btn = sub_soup.find('div', class_='btn')
                 if btn:
                     link = btn.find('a')
