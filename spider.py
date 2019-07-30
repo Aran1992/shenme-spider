@@ -119,7 +119,7 @@ class SMRuler(SpiderRuler):
 
     def get_url(self, item):
         link = item.find('a')
-        return link.get('href')
+        return link and link.get('href')
 
     def get_title(self, item):
         return ''.join(item.find('a').findAll(text=True))
@@ -168,7 +168,7 @@ class SogouPCRuler(SpiderRuler):
 
     def get_url(self, item):
         link = item.find('a')
-        return link.get('href')
+        return link and link.get('href')
 
     def get_title(self, item):
         return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
@@ -277,13 +277,16 @@ class BaiduPCRuler(SpiderRuler):
 
     def get_url(self, item):
         link = item.find('a')
-        url = link.get('href')
-        if url.startswith('javascript'):
-            return None
-        elif url.startswith('http://www.baidu.com/link?'):
-            return self.spider.get_real_url(url)
+        if link:
+            url = link.get('href')
+            if url.startswith('javascript'):
+                return None
+            elif url.startswith('http://www.baidu.com/link?'):
+                return self.spider.get_real_url(url)
+            else:
+                return url
         else:
-            return url
+            return None
 
     def get_title(self, item):
         return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
@@ -482,6 +485,8 @@ class Spider(metaclass=ABCMeta):
                 print('请求到的页面的内容为空，为防止IP被封禁，%s秒之后尝试重新抓取' % self.error_interval_time)
                 time.sleep(self.error_interval_time)
                 continue
+            with open('1.html', 'w', encoding='utf-8') as f:
+                f.write(soup.prettify())
         self.last_request_time = datetime.now()
         return r, soup
 
