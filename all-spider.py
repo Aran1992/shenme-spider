@@ -1,7 +1,11 @@
 from spider import *
 
 if __name__ == '__main__':
-    spider_list = [(RankSpider, '排名'), (SiteSpider, '收录'), (CheckSpider, '核对')]
+    spider_list = [
+        (RankSpider, '排名'),
+        (SiteSpider, '收录'),
+        (CheckSpider, '核对')
+    ]
     engine_list = [
         (SMRuler, '神马'),
         (SogouPCRuler, '搜狗PC'),
