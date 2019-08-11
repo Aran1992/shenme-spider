@@ -381,7 +381,8 @@ class LittleRankSpider:
                     result.append((
                         domain,
                         keyword,
-                        '%d-%d' % (page, rank),
+                        page,
+                        rank,
                         url,
                         ruler.get_title(item),
                         datetime.now()
@@ -581,7 +582,8 @@ class RankSpider(Spider):
                     self.result.append((
                         domain,
                         keyword,
-                        '%d-%d' % (page, rank),
+                        page,
+                        rank,
                         url,
                         self.ruler.get_title(item),
                         datetime.now()
@@ -594,9 +596,9 @@ class RankSpider(Spider):
         file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
         wb = Workbook()
         ws = wb.active
-        ws.append(('域名', '关键词', '搜索引擎', '排名', '真实地址', '标题', '查询时间'))
-        for (domain, keyword, rank, url, title, date_time) in self.result:
-            ws.append((domain, keyword, self.ruler.engine_name, rank, url, title, date_time))
+        ws.append(('域名', '关键词', '搜索引擎', '页数', '排名', '真实地址', '标题', '查询时间'))
+        for (domain, keyword, page, rank, url, title, date_time) in self.result:
+            ws.append((domain, keyword, self.ruler.engine_name, page, rank, url, title, date_time))
         wb.save(file_name)
         self.result = []
         print('查询结束，查询结果保存在 %s' % file_name)
@@ -709,11 +711,10 @@ class CheckSpider(Spider):
     def get_ranks(self, ruler, keywords, domains):
         results = LittleRankSpider(self).get_ranks(ruler, keywords, domains, 1)
         ranks = {}
-        for (domain, keyword, rank, _, _, _) in results:
+        for (domain, keyword, page, rank, _, _, _) in results:
             if keyword not in ranks.keys():
                 ranks[keyword] = {}
-            li = rank.split('-')
-            rank = (int(li[0]) - 1) * 10 + int(li[1])
+            rank = (page - 1) * 10 + rank
             if domain not in ranks[keyword].keys() \
                     or rank < ranks[keyword][domain]:
                 ranks[keyword][domain] = rank
