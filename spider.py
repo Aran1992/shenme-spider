@@ -522,15 +522,22 @@ class RankSpider(Spider):
         Spider.__init__(self, ruler_class)
         self.keyword_domains_map = {}
         self.searched_keywords = []
+        self.filename = ''
         self.main()
 
     def search(self):
+        filename_kd_map = self.get_input()
+        for index, filename in enumerate(filename_kd_map.keys()):
+            self.sub_search(index + 1, filename, filename_kd_map[filename])
+
+    def sub_search(self, index, filename, keyword_domains_map):
+        print('开始第%s个文件%s' % (index, filename))
+        self.filename = filename
+        self.keyword_domains_map = keyword_domains_map
         self.started = True
         self.result = []
         self.searched_keywords = []
-
         start_time = datetime.now()
-        self.keyword_domains_map = self.get_input()
         print('总共要查找%s关键词' % len(self.keyword_domains_map.keys()))
         for i, keyword in enumerate(self.keyword_domains_map.keys()):
             domain_set = self.keyword_domains_map[keyword]
@@ -541,37 +548,35 @@ class RankSpider(Spider):
         self.started = False
 
     def get_input(self):
-        file_path = ''
+        filename_kd_map = {}
         path = '.\\import'
         for file in os.listdir(path):
             file_path = os.path.join(path, file)
-            break
-        if file_path == '' or not file_path.endswith('.xlsx'):
-            raise MyError('import目录之下没有发现xlsx文件')
-        wb = load_workbook(file_path)
-        ws = wb.active
-        keyword_domains_map = {}
-        if self.is_keyword_domain_map:
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                keyword = row[1]
-                domain = row[0]
-                if keyword is not None and domain is not None:
-                    if keyword not in keyword_domains_map.keys():
-                        keyword_domains_map[keyword] = set()
-                    keyword_domains_map[keyword].add(domain)
-        else:
-            domain_set = set()
-            keyword_set = set()
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                keyword = row[1]
-                domain = row[0]
-                if domain is not None:
-                    domain_set.add(domain)
-                if keyword is not None:
-                    keyword_set.add(keyword)
-            for keyword in keyword_set:
-                keyword_domains_map[keyword] = domain_set
-        return keyword_domains_map
+            wb = load_workbook(file_path)
+            ws = wb.active
+            keyword_domains_map = {}
+            if self.is_keyword_domain_map:
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    keyword = row[1]
+                    domain = row[0]
+                    if keyword is not None and domain is not None:
+                        if keyword not in keyword_domains_map.keys():
+                            keyword_domains_map[keyword] = set()
+                        keyword_domains_map[keyword].add(domain)
+            else:
+                domain_set = set()
+                keyword_set = set()
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    keyword = row[1]
+                    domain = row[0]
+                    if domain is not None:
+                        domain_set.add(domain)
+                    if keyword is not None:
+                        keyword_set.add(keyword)
+                for keyword in keyword_set:
+                    keyword_domains_map[keyword] = domain_set
+            filename_kd_map[file] = keyword_domains_map
+        return filename_kd_map
 
     def get_rank(self, index, keyword, domain_set):
         print('开始抓取第%s个关键词：%s' % (index, keyword))
@@ -605,7 +610,7 @@ class RankSpider(Spider):
     def save_result(self):
         if not self.started:
             return
-        file_name = '关键词排名-%s.xlsx' % get_cur_time_filename()
+        file_name = '关键词排名-%s-%s-%s.xlsx' % (self.ruler.engine_name, self.filename, get_cur_time_filename())
         wb = Workbook()
         ws = wb.active
         ws.append(('域名', '关键词', '搜索引擎', '页数', '排名', '真实地址', '标题', '查询时间'))
@@ -675,7 +680,7 @@ class SiteSpider(Spider):
         for title in self.result:
             ws.append((title,))
         self.result = []
-        file_name = '收录标题-%s.xlsx' % get_cur_time_filename()
+        file_name = '收录标题-%s-%s.xlsx' % (self.ruler.engine_name, get_cur_time_filename())
         wb.save(file_name)
 
 
@@ -756,7 +761,7 @@ class CheckSpider(Spider):
                 total_price = total_price + check_price
                 ws.append((index, keyword, domain, exponent, price3, price5, rank, charge, check_rank, check_price))
         ws.append((None, None, None, None, None, None, None, None, '核对总价', total_price))
-        file_name = '核对结果-%s.xlsx' % get_cur_time_filename()
+        file_name = '核对结果-%s-%s.xlsx' % (self.ruler.engine_name, get_cur_time_filename())
         wb.save(file_name)
         input('核对完毕，核对结果保存在%s' % file_name)
 
