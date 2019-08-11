@@ -350,11 +350,12 @@ class LittleRankSpider:
     def __init__(self, spider):
         self.spider = spider
 
-    def get_ranks(self, ruler, keywords, domains, page):
+    def get_ranks(self, ruler, keyword_domains_map, page):
         result = []
         searched_keywords = []
-        for i, keyword in enumerate(keywords):
-            result += self.get_rank(ruler, i + 1, keyword, domains, page)
+        for i, keyword in enumerate(keyword_domains_map.keys()):
+            domain_set = keyword_domains_map[keyword]
+            result += self.get_rank(ruler, i + 1, keyword, domain_set, page)
             searched_keywords.append(keyword)
         return result
 
@@ -403,6 +404,7 @@ class Spider(metaclass=ABCMeta):
         cfg.read('config.ini')
         self.reconnect_interval_time = float(cfg.get('config', 'reconnect_interval_time'))
         self.error_interval_time = float(cfg.get('config', 'error_interval_time'))
+        self.is_keyword_domain_map = int(cfg.get('config', 'is_keyword_domain_map')) == 1
 
     def main(self):
         try:
@@ -518,8 +520,7 @@ class Spider(metaclass=ABCMeta):
 class RankSpider(Spider):
     def __init__(self, ruler_class):
         Spider.__init__(self, ruler_class)
-        self.keyword_set = set()
-        self.domain_set = set()
+        self.keyword_domains_map = {}
         self.searched_keywords = []
         self.main()
 
@@ -527,15 +528,12 @@ class RankSpider(Spider):
         self.started = True
         self.result = []
         self.searched_keywords = []
-        self.keyword_set = set()
-        self.domain_set = set()
 
         start_time = datetime.now()
-        (keyword_set, domain_set) = self.get_input()
-        self.keyword_set = keyword_set
-        self.domain_set = domain_set
-        print('总共要查找%s关键词，有%s个网站' % (len(keyword_set), len(domain_set)))
-        for i, keyword in enumerate(keyword_set):
+        self.keyword_domains_map = self.get_input()
+        print('总共要查找%s关键词' % len(self.keyword_domains_map.keys()))
+        for i, keyword in enumerate(self.keyword_domains_map.keys()):
+            domain_set = self.keyword_domains_map[keyword]
             self.get_rank(i + 1, keyword, domain_set)
         self.save_result()
         end_time = datetime.now()
@@ -552,14 +550,28 @@ class RankSpider(Spider):
             raise MyError('import目录之下没有发现xlsx文件')
         wb = load_workbook(file_path)
         ws = wb.active
-        d = set()
-        k = set()
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if row[0] is not None:
-                d.add(row[0])
-            if row[1] is not None:
-                k.add(row[1])
-        return k, d
+        keyword_domains_map = {}
+        if self.is_keyword_domain_map:
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                keyword = row[1]
+                domain = row[0]
+                if keyword is not None and domain is not None:
+                    if keyword not in keyword_domains_map.keys():
+                        keyword_domains_map[keyword] = set()
+                    keyword_domains_map[keyword].add(domain)
+        else:
+            domain_set = set()
+            keyword_set = set()
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                keyword = row[1]
+                domain = row[0]
+                if domain is not None:
+                    domain_set.add(domain)
+                if keyword is not None:
+                    keyword_set.add(keyword)
+            for keyword in keyword_set:
+                keyword_domains_map[keyword] = domain_set
+        return keyword_domains_map
 
     def get_rank(self, index, keyword, domain_set):
         print('开始抓取第%s个关键词：%s' % (index, keyword))
@@ -606,7 +618,7 @@ class RankSpider(Spider):
 
     def save_un_searched(self):
         un_searched_keywords = []
-        for keyword in self.keyword_set:
+        for keyword in self.keyword_domains_map.keys():
             if keyword not in self.searched_keywords:
                 un_searched_keywords.append(keyword)
         if len(un_searched_keywords) != 0:
@@ -676,8 +688,8 @@ class CheckSpider(Spider):
         self.started = True
         start_time = datetime.now()
         prices = self.get_input()
-        (keywords, domains) = self.get_keywords_domains(prices)
-        ranks = self.get_ranks(self.ruler, keywords, domains)
+        keyword_domains_map = self.get_keyword_domain_map(prices)
+        ranks = self.get_ranks(self.ruler, keyword_domains_map)
         self.check_price(prices, ranks)
         end_time = datetime.now()
         print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
@@ -698,18 +710,29 @@ class CheckSpider(Spider):
         wb = load_workbook(file_path)
         return wb.active
 
-    def get_keywords_domains(self, prices):
-        keywords = set()
-        domains = set()
-        for (index, keyword, domain, exponent, price3, price5, rank, charge) \
-                in prices.iter_rows(min_row=2, values_only=True):
-            if index is not None:
-                keywords.add(keyword)
-                domains.add(domain)
-        return keywords, domains
+    def get_keyword_domain_map(self, prices):
+        keyword_domains_map = {}
+        if self.is_keyword_domain_map:
+            keywords = set()
+            domains = set()
+            for (index, keyword, domain, exponent, price3, price5, rank, charge) \
+                    in prices.iter_rows(min_row=2, values_only=True):
+                if index is not None:
+                    keywords.add(keyword)
+                    domains.add(domain)
+            for keyword in keywords:
+                keyword_domains_map[keyword] = domains
+        else:
+            for (index, keyword, domain, exponent, price3, price5, rank, charge) \
+                    in prices.iter_rows(min_row=2, values_only=True):
+                if index is not None:
+                    if keyword not in keyword_domains_map.keys():
+                        keyword_domains_map[keyword] = set()
+                    keyword_domains_map[keyword].add(domain)
+        return keyword_domains_map
 
-    def get_ranks(self, ruler, keywords, domains):
-        results = LittleRankSpider(self).get_ranks(ruler, keywords, domains, 1)
+    def get_ranks(self, ruler, keyword_domains_map):
+        results = LittleRankSpider(self).get_ranks(ruler, keyword_domains_map, 1)
         ranks = {}
         for (domain, keyword, page, rank, _, _, _) in results:
             if keyword not in ranks.keys():
