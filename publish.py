@@ -24,7 +24,16 @@ def sp():
     zipf.close()
 
 
-mode = input('所有工具：0/打包排名爬虫：1/打包核对工具：2\n')
+def status_spider():
+    os.system('pyinstaller -F status-spider/spider.py')
+    zipf = zipfile.ZipFile('状态查询.zip', 'w')
+    zipf.write('./status-spider/config.ini', 'config.ini')
+    zipf.write('./status-spider/import/import.xlsx', 'import/import.xlsx')
+    zipf.write('./dist/spider.exe', '状态查询.exe')
+    zipf.close()
+
+
+mode = input('所有工具：0/打包排名爬虫：1/打包核对工具：2/状态查询工具：3')
 if mode == '0':
     all()
     sp()
@@ -32,3 +41,5 @@ elif mode == '1':
     all()
 elif mode == '2':
     sp()
+elif mode == '3':
+    status_spider()

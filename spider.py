@@ -1,14 +1,15 @@
+import ast
+import os
+import time
+import traceback
+from abc import ABCMeta, abstractmethod
+from configparser import ConfigParser
+from datetime import datetime
+from urllib.parse import urlparse, urljoin
+
 import requests
 from bs4 import BeautifulSoup, Comment
 from openpyxl import load_workbook, Workbook
-import os
-import ast
-import time
-import traceback
-from datetime import datetime
-from configparser import ConfigParser
-from abc import ABCMeta, abstractmethod
-from urllib.parse import urlparse, urljoin
 
 PAGE = 10
 
