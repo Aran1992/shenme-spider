@@ -9,6 +9,9 @@ import aiohttp
 from bs4 import BeautifulSoup
 from openpyxl import load_workbook, Workbook
 
+# import this seems unused but it's to prevent 'LookupError: unknown encoding: idna'
+import encodings.idna
+
 
 def get_cur_time_filename():
     return time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
@@ -40,6 +43,12 @@ class StatusSpider:
         self.cfg.read('config.ini')
         self.max_count = int(self.cfg.get('config', 'max_count'))
         self.timeout = float(self.cfg.get('config', 'timeout'))
+        self.search_included = self.cfg.get('config', 'search_included') == '1'
+        self.search_http = self.cfg.get('config', 'search_http') == '1'
+        self.search_https = self.cfg.get('config', 'search_https') == '1'
+        self.search_keywords = self.cfg.get('config', 'search_keywords') == '1'
+        self.search_generator = self.cfg.get('config', 'search_generator') == '1'
+        self.search_refresh_datetime = self.cfg.get('config', 'search_refresh_datetime') == '1'
         self.main()
 
     def main(self):
@@ -112,10 +121,17 @@ class StatusSpider:
                 'generator': '',
                 'refresh_datetime': None,
             }
-        http_task = asyncio.create_task(self.get_url(session, url, 'http'))
-        https_task = asyncio.create_task(self.get_url(session, url, 'https'))
-        included_task = asyncio.create_task(self.is_site_included(session, url))
-        await asyncio.gather(http_task, https_task, included_task)
+        tasks = []
+        # 如果及不查询http状态也不查询https状态 那么就要通过http请求获得页面 来获得剩余的信息
+        if self.search_http or \
+                (
+                        not self.search_https and self.search_keywords or self.search_generator or self.search_refresh_datetime):
+            tasks.append(asyncio.create_task(self.get_url(session, url, 'http')))
+        if self.search_https:
+            tasks.append(asyncio.create_task(self.get_url(session, url, 'https')))
+        if self.search_included:
+            tasks.append(asyncio.create_task(self.is_site_included(session, url)))
+        await asyncio.gather(*tasks)
         print(f'{url} 状态查询结束')
         if len(self.wait_url_list) != 0:
             url = self.wait_url_list.pop(0)
@@ -136,18 +152,19 @@ class StatusSpider:
                     generator_meta = soup.find('meta', attrs={'name': 'generator'})
                     result['generator'] = generator_meta and 'wp' or 'zm'
                     suffix = result['generator'] == 'wp' and 'feed' or 'rss.php'
-                    async with session.get(f'{protocol}://{adjust_site(url)}/{suffix}',
-                                           timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp2:
-                        soup2 = BeautifulSoup(await resp2.text(), 'lxml')
-                        pub_date = (soup2.find('pubDate') or soup2.find('pubdate'))
-                        if pub_date:
-                            dt_str = pub_date.get_text()
-                            if '+' in dt_str:
-                                dt_str = dt_str.split('+')[0].strip()
-                                dt = datetime.datetime.strptime(dt_str, '%a, %d %b %Y %H:%M:%S')
-                            else:
-                                dt = datetime.datetime.strptime(dt_str.strip(), '%Y-%m-%d %H:%M:%S')
-                            result['refresh_datetime'] = dt
+                    if self.search_refresh_datetime:
+                        async with session.get(f'{protocol}://{adjust_site(url)}/{suffix}',
+                                               timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp2:
+                            soup2 = BeautifulSoup(await resp2.text(), 'lxml')
+                            pub_date = (soup2.find('pubDate') or soup2.find('pubdate'))
+                            if pub_date:
+                                dt_str = pub_date.get_text()
+                                if '+' in dt_str:
+                                    dt_str = dt_str.split('+')[0].strip()
+                                    dt = datetime.datetime.strptime(dt_str, '%a, %d %b %Y %H:%M:%S')
+                                else:
+                                    dt = datetime.datetime.strptime(dt_str.strip(), '%Y-%m-%d %H:%M:%S')
+                                result['refresh_datetime'] = dt
         except aiohttp.client_exceptions.ClientConnectorError as e:
             if ' ssl:None [Connect call failed (' in str(e):
                 result[protocol] = 'HTTPS连接失败'
@@ -180,53 +197,48 @@ class StatusSpider:
 
     def save_result(self):
         print('开始保存查询结果')
+        l = [
+            ('百度是否收录', self.search_included, 'included',),
+            ('HTTP', self.search_http, 'http',),
+            ('HTTPS', self.search_https, 'https',),
+            ('关键词', self.search_keywords, 'keywords',),
+            ('模板', self.search_generator, 'generator',),
+            ('更新时间', self.search_refresh_datetime, 'refresh_datetime',),
+        ]
+
         wb = Workbook()
         ws = wb.active
-        ws.append(('网站', '百度是否收录', 'HTTP', 'HTTPS', '关键词', '模板', '更新时间'))
+
+        row = ['网站', ]
+        for (name, search, _) in l:
+            if search:
+                row.append(name)
+        ws.append(tuple(row))
+
         for url in self.url_list:
             if url in self.results:
                 item = self.results[url]
 
                 if 'included' in item:
                     if item['included']:
-                        included = '是'
+                        item['included'] = '是'
                     else:
-                        included = '否'
-                else:
-                    included = None
+                        item['included'] = '否'
 
-                if 'http' in item:
-                    http = item['http']
-                else:
-                    http = None
-
-                if 'https' in item:
-                    https = item['https']
-                else:
-                    https = None
-
-                ws.append((
-                    url,
-                    included,
-                    str(http),
-                    str(https),
-                    item['keywords'],
-                    item['generator'],
-                    item['refresh_datetime']
-                ))
+                row = [url]
+                for (_, search, key) in l:
+                    if search:
+                        row.append(item[key])
+                ws.append(tuple(row))
             else:
-                ws.append((
-                    url,
-                    '未查询',
-                    '未查询',
-                    '未查询',
-                    '未查询',
-                    '未查询',
-                    '未查询',
-                ))
+                row = [url]
+                for (_, search, _) in l:
+                    if search:
+                        row.append('未查询')
+                ws.append(tuple(row))
         file_name = f'状态查询-{get_cur_time_filename()}.xlsx'
         wb.save(file_name)
-        print(f'查询结果保存在{file_name}')
+        print(f'查询结果保存在 {file_name}')
 
 
 if __name__ == '__main__':
