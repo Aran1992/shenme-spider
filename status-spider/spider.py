@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import os
+import ssl
 import time
 import traceback
 from configparser import ConfigParser
@@ -10,7 +11,7 @@ from bs4 import BeautifulSoup
 from openpyxl import load_workbook, Workbook
 
 # import this seems unused but it's to prevent 'LookupError: unknown encoding: idna'
-import encodings.idna
+# import encodings.idna
 
 
 def get_cur_time_filename():
@@ -50,6 +51,7 @@ class StatusSpider:
         self.search_generator = self.cfg.get('config', 'search_generator') == '1'
         self.search_refresh_datetime = self.cfg.get('config', 'search_refresh_datetime') == '1'
         self.main()
+        input()
 
     def main(self):
         try:
@@ -63,20 +65,19 @@ class StatusSpider:
         except:
             self.save_result()
             filename = 'error-%s.log' % get_cur_time_filename()
-            with open(filename, 'w', encoding='utf-8') as f:
+            with open(filename, 'w', ) as f:
                 f.write(traceback.format_exc())
             traceback.print_exc()
             input('请将最新的error.log文件发给技术人员')
 
     def get_mode(self):
-        while True:
-            run_mode = input('定时运行（输入1）还是马上运行（输入0）？')
-            if run_mode == '0':
-                asyncio.run(self.search())
-            elif run_mode == '1':
-                self.start()
-            else:
-                print('输入了未知模式，请重新输入')
+        run_mode = self.cfg.get('config', 'schedule')
+        if run_mode == '0':
+            asyncio.run(self.search())
+        elif run_mode == '1':
+            self.start()
+        else:
+            print('输入了未知模式，请重新输入')
 
     def start(self):
         now = datetime.datetime.now()
@@ -116,11 +117,7 @@ class StatusSpider:
     async def get_url_status(self, session, url):
         print(f'开始查询 {url} 状态')
         if url not in self.results:
-            self.results[url] = {
-                'keywords': '',
-                'generator': '',
-                'refresh_datetime': None,
-            }
+            self.results[url] = {}
         tasks = []
         # 如果及不查询http状态也不查询https状态 那么就要通过http请求获得页面 来获得剩余的信息
         if self.search_http or \
@@ -165,13 +162,17 @@ class StatusSpider:
                                 else:
                                     dt = datetime.datetime.strptime(dt_str.strip(), '%Y-%m-%d %H:%M:%S')
                                 result['refresh_datetime'] = dt
-        except aiohttp.client_exceptions.ClientConnectorError as e:
-            if ' ssl:None [Connect call failed (' in str(e):
-                result[protocol] = 'HTTPS连接失败'
-            else:
-                raise e
         except asyncio.TimeoutError:
             result[protocol] = '请求超时'
+        except UnicodeDecodeError as e:
+            result[protocol] = f'网站编码过于奇特，没办法解析（{str(e)}）'
+        except (
+                aiohttp.client_exceptions.ClientConnectorCertificateError,
+                aiohttp.client_exceptions.ClientConnectorError,
+                aiohttp.client_exceptions.ClientOSError,
+                ssl.SSLCertVerificationError,
+        ) as e:
+            result[protocol] = f'SSL证书验证失败 ({str(e)})'
 
     async def is_site_included(self, session, url):
         params = {'word': f'site:${url}'}
@@ -197,7 +198,7 @@ class StatusSpider:
 
     def save_result(self):
         print('开始保存查询结果')
-        l = [
+        name_flag_key_tuple_list = [
             ('百度是否收录', self.search_included, 'included',),
             ('HTTP', self.search_http, 'http',),
             ('HTTPS', self.search_https, 'https',),
@@ -210,7 +211,7 @@ class StatusSpider:
         ws = wb.active
 
         row = ['网站', ]
-        for (name, search, _) in l:
+        for (name, search, _) in name_flag_key_tuple_list:
             if search:
                 row.append(name)
         ws.append(tuple(row))
@@ -226,13 +227,13 @@ class StatusSpider:
                         item['included'] = '否'
 
                 row = [url]
-                for (_, search, key) in l:
+                for (_, search, key) in name_flag_key_tuple_list:
                     if search:
-                        row.append(item[key])
+                        row.append((key in item) and item[key] or '未查询')
                 ws.append(tuple(row))
             else:
                 row = [url]
-                for (_, search, _) in l:
+                for (_, search, _) in name_flag_key_tuple_list:
                     if search:
                         row.append('未查询')
                 ws.append(tuple(row))
