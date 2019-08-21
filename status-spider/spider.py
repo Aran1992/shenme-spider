@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from openpyxl import load_workbook, Workbook
 
 # import this seems unused but it's to prevent 'LookupError: unknown encoding: idna'
-# import encodings.idna
+import encodings.idna
 
 
 def get_cur_time_filename():
