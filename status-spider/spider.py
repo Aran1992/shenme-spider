@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import os
-import ssl
 import time
 import traceback
 from configparser import ConfigParser
@@ -13,6 +12,26 @@ from openpyxl import load_workbook, Workbook
 # import this seems unused but it's to prevent 'LookupError: unknown encoding: idna'
 import encodings.idna
 
+HEADERS = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;'
+              'q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Host': 'www.rfid808.com',
+    'Pragma': 'no-cache',
+    'Sec-Fetch-Site': 'none',
+    'Upgrade-Insecure-Requests': '1',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) '
+                  'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Mobile Safari/537.36',
+}
+
+
+def create_headers(site):
+    HEADERS['Host'] = adjust_site(site)
+    return HEADERS
+
 
 def get_cur_time_filename():
     return time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
@@ -22,6 +41,10 @@ def format_cd_time(seconds):
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     return "%d小时%02d分%02d秒" % (h, m, s)
+
+
+def format_error(tag, e):
+    return f'{tag} ({type(e).__name__}: {str(e)})'
 
 
 def adjust_site(url):
@@ -119,10 +142,9 @@ class StatusSpider:
         if url not in self.results:
             self.results[url] = {}
         tasks = []
-        # 如果及不查询http状态也不查询https状态 那么就要通过http请求获得页面 来获得剩余的信息
-        if self.search_http or \
-                (
-                        not self.search_https and self.search_keywords or self.search_generator or self.search_refresh_datetime):
+        # 如果既不查询http状态也不查询https状态 那么就要通过http请求获得页面 来获得剩余的信息
+        if self.search_http or (not self.search_https
+                                and self.search_keywords or self.search_generator or self.search_refresh_datetime):
             tasks.append(asyncio.create_task(self.get_url(session, url, 'http')))
         if self.search_https:
             tasks.append(asyncio.create_task(self.get_url(session, url, 'https')))
@@ -138,10 +160,10 @@ class StatusSpider:
         result = self.results[url]
         try:
             async with session.get(f'{protocol}://{adjust_site(url)}',
+                                   headers=create_headers(url),
                                    timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
                 result[protocol] = resp.status
-                if (protocol == 'http' and 'https' not in result) \
-                        or (protocol == 'https' and 'http' not in result):
+                if not self.is_all_info_collected(result):
                     soup = BeautifulSoup(await resp.text(), 'lxml')
                     keywords_meta = soup.find('meta', attrs={'name': 'keywords'})
                     if keywords_meta:
@@ -150,29 +172,38 @@ class StatusSpider:
                     result['generator'] = generator_meta and 'wp' or 'zm'
                     suffix = result['generator'] == 'wp' and 'feed' or 'rss.php'
                     if self.search_refresh_datetime:
-                        async with session.get(f'{protocol}://{adjust_site(url)}/{suffix}',
-                                               timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp2:
-                            soup2 = BeautifulSoup(await resp2.text(), 'lxml')
-                            pub_date = (soup2.find('pubDate') or soup2.find('pubdate'))
-                            if pub_date:
-                                dt_str = pub_date.get_text()
-                                if '+' in dt_str:
-                                    dt_str = dt_str.split('+')[0].strip()
-                                    dt = datetime.datetime.strptime(dt_str, '%a, %d %b %Y %H:%M:%S')
+                        try:
+                            async with session.get(f'{protocol}://{adjust_site(url)}/{suffix}',
+                                                   headers=create_headers(url),
+                                                   timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp2:
+                                soup2 = BeautifulSoup(await resp2.text(), 'lxml')
+                                pub_date = (soup2.find('pubDate') or soup2.find('pubdate'))
+                                if pub_date:
+                                    dt_str = pub_date.get_text()
+                                    if '+' in dt_str:
+                                        dt_str = dt_str.split('+')[0].strip()
+                                        dt = datetime.datetime.strptime(dt_str, '%a, %d %b %Y %H:%M:%S')
+                                    else:
+                                        dt = datetime.datetime.strptime(dt_str.strip(), '%Y-%m-%d %H:%M:%S')
+                                    result['refresh_datetime'] = dt
                                 else:
-                                    dt = datetime.datetime.strptime(dt_str.strip(), '%Y-%m-%d %H:%M:%S')
-                                result['refresh_datetime'] = dt
+                                    result['refresh_datetime'] = f'未找到pubdate元素 {soup2.prettify()}'
+                        except asyncio.TimeoutError:
+                            result['refresh_datetime'] = '查询超时'
+                        except Exception as e:
+                            result['refresh_datetime'] = format_error('查询出错', e)
         except asyncio.TimeoutError:
             result[protocol] = '请求超时'
         except UnicodeDecodeError as e:
-            result[protocol] = f'网站编码过于奇特，没办法解析（{str(e)}）'
+            result[protocol] = format_error('网站编码过于奇特，没办法解析', e)
+        except aiohttp.client_exceptions.ClientConnectorCertificateError as e:
+            result[protocol] = format_error('SSL证书验证失败', e)
         except (
-                aiohttp.client_exceptions.ClientConnectorCertificateError,
                 aiohttp.client_exceptions.ClientConnectorError,
                 aiohttp.client_exceptions.ClientOSError,
-                ssl.SSLCertVerificationError,
+                aiohttp.client_exceptions.ServerDisconnectedError,
         ) as e:
-            result[protocol] = f'SSL证书验证失败 ({str(e)})'
+            result[protocol] = format_error('未知错误', e)
 
     async def is_site_included(self, session, url):
         params = {'word': f'site:${url}'}
@@ -240,6 +271,13 @@ class StatusSpider:
         file_name = f'状态查询-{get_cur_time_filename()}.xlsx'
         wb.save(file_name)
         print(f'查询结果保存在 {file_name}')
+
+    def is_all_info_collected(self, result):
+        return (not self.search_http or ('http' in result)) \
+               and (not self.search_https or ('https' in result)) \
+               and (not self.search_keywords or ('keywords' in result)) \
+               and (not self.search_generator or ('generator' in result)) \
+               and (not self.search_refresh_datetime or ('refresh_datetime' in result))
 
 
 if __name__ == '__main__':
