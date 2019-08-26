@@ -151,7 +151,7 @@ class StatusSpider:
         if self.search_included:
             tasks.append(asyncio.create_task(self.is_site_included(session, url)))
         await asyncio.gather(*tasks)
-        print(f'{url} 状态查询结束')
+        print(f'{url} 状态查询结束 还剩{self.get_remain_count()}个正在查询')
         if len(self.wait_url_list) != 0:
             url = self.wait_url_list.pop(0)
             await self.get_url_status(session, url)
@@ -168,6 +168,8 @@ class StatusSpider:
                     keywords_meta = soup.find('meta', attrs={'name': 'keywords'})
                     if keywords_meta:
                         result['keywords'] = keywords_meta.attrs['content']
+                    else:
+                        result['keywords'] = '没有包含keyword的<meta>标签'
                     generator_meta = soup.find('meta', attrs={'name': 'generator'})
                     result['generator'] = generator_meta and 'wp' or 'zm'
                     suffix = result['generator'] == 'wp' and 'feed' or 'rss.php'
@@ -187,7 +189,7 @@ class StatusSpider:
                                         dt = datetime.datetime.strptime(dt_str.strip(), '%Y-%m-%d %H:%M:%S')
                                     result['refresh_datetime'] = dt
                                 else:
-                                    result['refresh_datetime'] = f'未找到pubdate元素 {soup2.prettify()}'
+                                    result['refresh_datetime'] = '未找到<pubdate>元素'
                         except asyncio.TimeoutError:
                             result['refresh_datetime'] = '查询超时'
                         except Exception as e:
@@ -203,7 +205,7 @@ class StatusSpider:
                 aiohttp.client_exceptions.ClientOSError,
                 aiohttp.client_exceptions.ServerDisconnectedError,
         ) as e:
-            result[protocol] = format_error('未知错误', e)
+            result[protocol] = format_error('查询出错', e)
 
     async def is_site_included(self, session, url):
         params = {'word': f'site:${url}'}
@@ -213,19 +215,22 @@ class StatusSpider:
                           'Chrome/75.0.3770.100 '
                           'Safari/537.36'
         }
-        async with session.get(
-                'https://www.baidu.com/s',
-                params=params,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=self.timeout)
-        ) as resp:
-            soup = BeautifulSoup(await resp.text(), 'lxml')
-            div_root = soup.find('div', id='content_left')
-            if div_root:
-                includes = div_root.find_all('div', recursive=False, id=lambda id_: id_ != 'rs_top_new')
-                self.results[url]['included'] = len(includes) != 0
-            else:
-                self.results[url]['included'] = False
+        try:
+            async with session.get(
+                    'https://www.baidu.com/s',
+                    params=params,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+            ) as resp:
+                soup = BeautifulSoup(await resp.text(), 'lxml')
+                div_root = soup.find('div', id='content_left')
+                if div_root:
+                    includes = div_root.find_all('div', recursive=False, id=lambda id_: id_ != 'rs_top_new')
+                    self.results[url]['included'] = len(includes) != 0
+                else:
+                    self.results[url]['included'] = False
+        except asyncio.TimeoutError:
+            self.results[url]['included'] = '请求超时'
 
     def save_result(self):
         print('开始保存查询结果')
@@ -257,6 +262,11 @@ class StatusSpider:
                     else:
                         item['included'] = '否'
 
+                if (self.search_http and item['http'] != 200) and (self.search_https and item['https'] != 200):
+                    for key in ['keywords', 'generator', 'refresh_datetime', ]:
+                        if key not in item:
+                            item[key] = '由于无法请求到页面，所以未能查询到信息'
+
                 row = [url]
                 for (_, search, key) in name_flag_key_tuple_list:
                     if search:
@@ -278,6 +288,14 @@ class StatusSpider:
                and (not self.search_keywords or ('keywords' in result)) \
                and (not self.search_generator or ('generator' in result)) \
                and (not self.search_refresh_datetime or ('refresh_datetime' in result))
+
+    def get_remain_count(self):
+        total = len(self.url_list)
+        complete = 0
+        for key in self.results.keys():
+            if self.is_all_info_collected(self.results[key]):
+                complete = complete + 1
+        return total - complete
 
 
 if __name__ == '__main__':
