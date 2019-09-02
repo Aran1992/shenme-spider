@@ -228,7 +228,8 @@ class SogouMobileRuler(SpiderRuler):
                 else:
                     # 个别情况下 会发生页面里面没有class为btn的div的情况
                     link = sub_soup.find('a')
-                return link.get('href')
+                if link:
+                    return link.get('href')
             else:
                 return r.url
 
