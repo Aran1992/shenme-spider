@@ -379,17 +379,19 @@ class LittleRankSpider:
             url = ruler.get_url(item)
             if url is not None:
                 print('本页第%s条URL为%s' % (rank, url))
-                domain = get_url_domain(url)
-                if domain in domain_set:
-                    result.append((
-                        domain,
-                        keyword,
-                        page,
-                        rank,
-                        url,
-                        ruler.get_title(item),
-                        datetime.now()
-                    ))
+                netloc = urlparse(url).netloc
+                for domain in domain_set:
+                    if domain in netloc:
+                        result.append((
+                            domain,
+                            keyword,
+                            page,
+                            rank,
+                            url,
+                            ruler.get_title(item),
+                            datetime.now()
+                        ))
+                        break
                 rank += 1
         return result
 
@@ -596,17 +598,19 @@ class RankSpider(Spider):
             url = self.ruler.get_url(item)
             if url is not None:
                 print('本页第%s条URL为%s' % (rank, url))
-                domain = get_url_domain(url)
-                if domain in domain_set:
-                    self.result.append((
-                        domain,
-                        keyword,
-                        page,
-                        rank,
-                        url,
-                        self.ruler.get_title(item),
-                        datetime.now()
-                    ))
+                netloc = urlparse(url).netloc
+                for domain in domain_set:
+                    if domain in netloc:
+                        self.result.append((
+                            domain,
+                            keyword,
+                            page,
+                            rank,
+                            url,
+                            self.ruler.get_title(item),
+                            datetime.now()
+                        ))
+                        break
                 rank += 1
 
     def save_result(self):
