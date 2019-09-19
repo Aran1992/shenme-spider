@@ -295,7 +295,7 @@ class BaiduPCRuler(SpiderRuler):
         return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
 
     def has_next_page(self, soup):
-        return soup.find('a', text='下一页')
+        return soup.find('a', text='下一页>')
 
 
 class BaiduMobileRuler(SpiderRuler):
@@ -345,7 +345,7 @@ class BaiduMobileRuler(SpiderRuler):
         return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
 
     def has_next_page(self, soup):
-        return soup.find('div', class_='new-pagenav-right')
+        return soup.find('a', class_='new-nextpage-only') or soup.find('a', class_='new-nextpage')
 
 
 class LittleRankSpider:
