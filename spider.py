@@ -34,6 +34,10 @@ class MyError(RuntimeError):
     pass
 
 
+class SogouPCSpiderError(RuntimeError):
+    pass
+
+
 class SpiderRuler(metaclass=ABCMeta):
     def __init__(self, spider):
         self.spider = spider
@@ -165,7 +169,11 @@ class SogouPCRuler(SpiderRuler):
         return True, ''
 
     def get_all_item(self, soup):
-        return soup.find('div', class_='results').find_all('div', recursive=False)
+        results = soup.find('div', class_='results')
+        if results:
+            return results.find_all('div', recursive=False)
+        else:
+            raise SogouPCSpiderError('该IP已被判定为爬虫，暂时无法获取到信息，将稍后尝试重新获取')
 
     def get_url(self, item):
         link = item.find('a')
@@ -219,7 +227,7 @@ class SogouMobileRuler(SpiderRuler):
             return url
         else:
             url = urljoin(self.spider.url, url)
-            (r, sub_soup) = self.spider.safe_request(url)
+            (r, sub_soup, _) = self.spider.safe_request(url)
             if r.url.startswith('http://wap.sogou.com/transcoding/sweb') \
                     or r.url.startswith('http://m.sogou.com/transcoding/sweb'):
                 btn = sub_soup.find('div', class_='btn')
@@ -372,8 +380,7 @@ class LittleRankSpider:
         print('开始第%d页' % page)
         result = []
         params = ruler.get_params(keyword, page)
-        (r, soup) = self.spider.safe_request(ruler.base_url, params=params)
-        all_item = ruler.get_all_item(soup)
+        (r, soup, all_item) = self.spider.safe_request(ruler.base_url, params=params)
         rank = 1
         for item in all_item:
             url = ruler.get_url(item)
@@ -494,7 +501,13 @@ class Spider(metaclass=ABCMeta):
                 time.sleep(self.error_interval_time)
                 continue
         self.last_request_time = datetime.now()
-        return r, soup
+        try:
+            items = self.ruler.get_all_item(soup)
+        except SogouPCSpiderError as e:
+            print(e)
+            time.sleep(self.error_interval_time)
+            return self.safe_request(url, params=params)
+        return r, soup, items
 
     def get_real_url(self, start_url):
         cur = datetime.now()
@@ -591,8 +604,7 @@ class RankSpider(Spider):
     def get_page(self, page, keyword, domain_set):
         print('开始第%d页' % page)
         params = self.ruler.get_params(keyword, page)
-        (r, soup) = self.safe_request(self.ruler.base_url, params=params)
-        all_item = self.ruler.get_all_item(soup)
+        (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
         rank = 1
         for item in all_item:
             url = self.ruler.get_url(item)
@@ -672,8 +684,7 @@ class SiteSpider(Spider):
     def get_page(self, domain, page):
         print('开始第%d页' % page)
         params = self.ruler.get_params('site:%s' % domain, page)
-        (r, soup) = self.safe_request(self.ruler.base_url, params=params)
-        all_item = self.ruler.get_all_item(soup)
+        (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
         for item in all_item:
             self.result.append(self.ruler.get_title(item))
         return soup
