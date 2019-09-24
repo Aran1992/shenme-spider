@@ -657,46 +657,58 @@ class RankSpider(Spider):
 class SiteSpider(Spider):
     def __init__(self, ruler_class):
         Spider.__init__(self, ruler_class)
-        self.domain = ''
+        self.domain_titles_map = {}
         self.main()
 
     def search(self):
         self.started = True
-        self.result = []
         start_time = datetime.now()
-        self.get_input()
-        print('本次查找的域名为 %s' % self.domain)
-        page = 1
-        soup = self.get_page(self.domain, page)
-        while soup and self.ruler.has_next_page(soup):
-            page += 1
-            soup = self.get_page(self.domain, page)
+        self.domain_titles_map = {}
+        domain_set = self.get_input()
+        for domain in domain_set:
+            self.get_domain(domain)
         self.save_result()
         end_time = datetime.now()
         print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
         self.started = False
 
     def get_input(self):
-        cfg = ConfigParser()
-        cfg.read('config.ini')
-        self.domain = cfg.get('config', 'domain')
+        path = '.\\要查收录的网址列表XLSX'
+        domain_set = set()
+        for file in os.listdir(path):
+            file_path = os.path.join(path, file)
+            wb = load_workbook(file_path)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                domain_set.add(row[0])
+        return domain_set
+
+    def get_domain(self, domain):
+        print('开始查找的域名为 %s' % domain)
+        self.domain_titles_map[domain] = []
+        page = 1
+        soup = self.get_page(domain, page)
+        while soup and self.ruler.has_next_page(soup):
+            page += 1
+            soup = self.get_page(domain, page)
 
     def get_page(self, domain, page):
         print('开始第%d页' % page)
         params = self.ruler.get_params('site:%s' % domain, page)
         (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
         for item in all_item:
-            self.result.append(self.ruler.get_title(item))
+            self.domain_titles_map[domain].append(self.ruler.get_title(item))
         return soup
 
     def save_result(self):
         if not self.started:
             return
         wb = Workbook()
-        ws = wb.active
-        for title in self.result:
-            ws.append((title,))
-        self.result = []
+        for domain in self.domain_titles_map.keys():
+            ws = wb.create_sheet(domain, 0)
+            for title in self.domain_titles_map[domain]:
+                ws.append((title,))
+        self.domain_titles_map = {}
         file_name = '收录标题-%s-%s.xlsx' % (self.ruler.engine_name, get_cur_time_filename())
         wb.save(file_name)
 
