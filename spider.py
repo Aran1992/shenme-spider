@@ -359,6 +359,7 @@ class BaiduMobileRuler(SpiderRuler):
 class LittleRankSpider:
     def __init__(self, spider):
         self.spider = spider
+        self.error_list = []
 
     def get_ranks(self, ruler, keyword_domains_map, page):
         result = []
@@ -367,7 +368,7 @@ class LittleRankSpider:
             domain_set = keyword_domains_map[keyword]
             result += self.get_rank(ruler, i + 1, keyword, domain_set, page)
             searched_keywords.append(keyword)
-        return result
+        return result, self.error_list
 
     def get_rank(self, ruler, index, keyword, domain_set, page):
         print('开始抓取第%s个关键词：%s' % (index, keyword))
@@ -383,7 +384,12 @@ class LittleRankSpider:
         (r, soup, all_item) = self.spider.safe_request(ruler.base_url, params=params)
         rank = 1
         for item in all_item:
-            url = ruler.get_url(item)
+            try:
+                url = ruler.get_url(item)
+            except:
+                url = None
+                self.error_list.append(traceback.format_exc())
+                traceback.print_exc()
             if url is not None:
                 print('本页第%s条URL为%s' % (rank, url))
                 netloc = urlparse(url).netloc
@@ -540,6 +546,7 @@ class RankSpider(Spider):
         self.keyword_domains_map = {}
         self.searched_keywords = []
         self.filename = ''
+        self.error_list = []
         self.main()
 
     def search(self):
@@ -607,7 +614,12 @@ class RankSpider(Spider):
         (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
         rank = 1
         for item in all_item:
-            url = self.ruler.get_url(item)
+            try:
+                url = self.ruler.get_url(item)
+            except:
+                url = None
+                self.error_list.append(traceback.format_exc())
+                traceback.print_exc()
             if url is not None:
                 print('本页第%s条URL为%s' % (rank, url))
                 netloc = urlparse(url).netloc
@@ -638,6 +650,7 @@ class RankSpider(Spider):
         self.result = []
         print('查询结束，查询结果保存在 %s' % file_name)
         self.save_un_searched()
+        self.save_error_list(self.error_list)
 
     def save_un_searched(self):
         un_searched_keywords = []
@@ -652,6 +665,15 @@ class RankSpider(Spider):
                 ws.append((keyword,))
             wb.save(file_name)
             print('未查询结果保存在 %s' % file_name)
+
+    def save_error_list(self, err_list):
+        if len(err_list) == 0:
+            return
+        filename = f'排名查询过程中产生的错误-${self.ruler.engine_name}-${get_cur_time_filename()}.log'
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write('\n\n'.join(err_list))
+        print(filename)
+        print('排名查询过程中产生了一些错误，虽然没有终止运行，但是可能会让结果不够准确，请将记录发给开发人员')
 
 
 class SiteSpider(Spider):
@@ -754,7 +776,8 @@ class CheckSpider(Spider):
         return keyword_domains_map
 
     def get_ranks(self, ruler, keyword_domains_map):
-        results = LittleRankSpider(self).get_ranks(ruler, keyword_domains_map, 1)
+        results, error_list = LittleRankSpider(self).get_ranks(ruler, keyword_domains_map, 1)
+        self.save_error_list(error_list)
         ranks = {}
         for (domain, keyword, page, rank, _, _, _) in results:
             if keyword not in ranks.keys():
@@ -792,3 +815,12 @@ class CheckSpider(Spider):
             return float(price3)
         if rank <= 5:
             return float(price5)
+
+    def save_error_list(self, err_list):
+        if len(err_list) == 0:
+            return
+        filename = f'核对过程中产生的错误-${self.ruler.engine_name}-${get_cur_time_filename()}.log'
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write('\n\n'.join(err_list))
+        print(filename)
+        print('核对过程中产生了一些错误，虽然没有终止运行，但是可能会让结果不够准确，请将记录发给开发人员')
