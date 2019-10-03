@@ -11,6 +11,10 @@ import requests
 from bs4 import BeautifulSoup, Comment
 from openpyxl import load_workbook, Workbook
 
+# import this seems unused
+# but it's to prevent 'bs4.FeatureNotFound: Couldn't find a tree builder with the features you requested: lxml.'
+import lxml
+
 PAGE = 10
 
 
