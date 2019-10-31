@@ -63,6 +63,7 @@ class StatusSpider:
         self.results = {}
         self.url_list = []
         self.wait_url_list = []
+        self.complete_count = 0
         self.cfg = ConfigParser()
         self.cfg.read('config.ini')
         self.max_count = int(self.cfg.get('config', 'max_count'))
@@ -119,6 +120,7 @@ class StatusSpider:
         self.results = {}
         self.url_list = self.get_input()
         self.wait_url_list = self.url_list[self.max_count:]
+        self.complete_count = 0
         async with aiohttp.ClientSession() as session:
             await asyncio.gather(*[self.get_url_status(session, url) for url in self.url_list[:self.max_count]])
         self.save_result()
@@ -151,7 +153,8 @@ class StatusSpider:
         if self.search_included:
             tasks.append(asyncio.create_task(self.is_site_included(session, url)))
         await asyncio.gather(*tasks)
-        print(f'{url} 状态查询结束 还剩{self.get_remain_count()}个正在查询')
+        self.complete_count = self.complete_count + 1
+        print(f'{url} 状态查询结束 还剩{len(self.url_list) - self.complete_count}个正在查询')
         if len(self.wait_url_list) != 0:
             url = self.wait_url_list.pop(0)
             await self.get_url_status(session, url)
@@ -270,13 +273,13 @@ class StatusSpider:
                 row = [url]
                 for (_, search, key) in name_flag_key_tuple_list:
                     if search:
-                        row.append((key in item) and item[key] or '未查询')
+                        row.append((key in item) and item[key] or '由于未知原因，未能查询到信息')
                 ws.append(tuple(row))
             else:
                 row = [url]
                 for (_, search, _) in name_flag_key_tuple_list:
                     if search:
-                        row.append('未查询')
+                        row.append('由于强行终止程序或者发生异常，未能进行查询')
                 ws.append(tuple(row))
         file_name = f'状态查询-{get_cur_time_filename()}.xlsx'
         wb.save(file_name)

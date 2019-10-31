@@ -8,6 +8,7 @@ def all():
     zipf = zipfile.ZipFile('%s.zip' % name, 'w')
     zipf.write('./config.ini', 'config.ini')
     zipf.write('./import/input.xlsx', 'import/input.xlsx')
+    zipf.write('./要查收录的网址列表XLSX/域名列表.xlsx', '要查收录的网址列表XLSX/域名列表.xlsx')
     zipf.write('./报价/收费方给的表格.xlsx', '报价/收费方给的表格.xlsx')
     zipf.write('./dist/%s.exe' % name, '%s.exe' % name)
     zipf.close()
