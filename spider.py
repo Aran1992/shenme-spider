@@ -15,7 +15,9 @@ from openpyxl import load_workbook, Workbook
 # but it's to prevent 'bs4.FeatureNotFound: Couldn't find a tree builder with the features you requested: lxml.'
 import lxml
 
-PAGE = 10
+cfg = ConfigParser()
+cfg.read('config.ini')
+PAGE = int(cfg.get('config', 'page_count'))
 
 
 def get_cur_time_filename():
