@@ -15,9 +15,9 @@ from openpyxl import load_workbook, Workbook
 # but it's to prevent 'bs4.FeatureNotFound: Couldn't find a tree builder with the features you requested: lxml.'
 import lxml
 
-cfg = ConfigParser()
-cfg.read('config.ini')
-PAGE = int(cfg.get('config', 'page_count'))
+page_cfg = ConfigParser()
+page_cfg.read('config.ini')
+PAGE = int(page_cfg.get('config', 'page_count'))
 
 
 def get_cur_time_filename():
@@ -91,6 +91,9 @@ class SpiderRuler(metaclass=ABCMeta):
     def has_next_page(self, soup):
         pass
 
+    def get_next_page_url(self, soup):
+        return None
+
 
 class SMRuler(SpiderRuler):
     def __init__(self, spider):
@@ -105,7 +108,8 @@ class SMRuler(SpiderRuler):
 
     @property
     def user_agent(self):
-        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/75.0.3770.100 Safari/537.36'
 
     @property
     def base_url(self):
@@ -312,6 +316,15 @@ class BaiduPCRuler(SpiderRuler):
     def has_next_page(self, soup):
         return soup.find('a', text='下一页>')
 
+    def get_next_page_url(self, soup):
+        page_div = soup.find(id="page")
+        if page_div:
+            next_page_link = page_div.find('a', text='下一页>')
+            if next_page_link:
+                href = next_page_link.get('href')
+                if href:
+                    return urljoin(self.base_url, href)
+
 
 class BaiduMobileRuler(SpiderRuler):
     def __init__(self, spider):
@@ -362,11 +375,19 @@ class BaiduMobileRuler(SpiderRuler):
     def has_next_page(self, soup):
         return soup.find('a', class_='new-nextpage-only') or soup.find('a', class_='new-nextpage')
 
+    def get_next_page_url(self, soup):
+        next_page_link = soup.find('a', class_='new-nextpage-only') or soup.find('a', class_='new-nextpage')
+        if next_page_link:
+            href = next_page_link.get('href')
+            if href:
+                return urljoin(self.base_url, href)
+
 
 class LittleRankSpider:
     def __init__(self, spider):
         self.spider = spider
         self.error_list = []
+        self.page_url = None
 
     def get_ranks(self, ruler, keyword_domains_map, page):
         result = []
@@ -378,8 +399,10 @@ class LittleRankSpider:
         return result, self.error_list
 
     def get_rank(self, ruler, index, keyword, domain_set, page):
+        self.spider.reset_session()
         print('开始抓取第%s个关键词：%s' % (index, keyword))
         result = []
+        self.page_url = None
         for i in range(page):
             result += self.get_page(ruler, i + 1, keyword, domain_set)
         return result
@@ -387,8 +410,12 @@ class LittleRankSpider:
     def get_page(self, ruler, page, keyword, domain_set):
         print('开始第%d页' % page)
         result = []
-        params = ruler.get_params(keyword, page)
-        (r, soup, all_item) = self.spider.safe_request(ruler.base_url, params=params)
+        if self.page_url:
+            (r, soup, all_item) = self.spider.safe_request(self.page_url)
+        else:
+            params = ruler.get_params(keyword, page)
+            (r, soup, all_item) = self.spider.safe_request(ruler.base_url, params=params)
+        self.page_url = ruler.get_next_page_url(soup)
         rank = 1
         for item in all_item:
             try:
@@ -419,6 +446,8 @@ class LittleRankSpider:
 class Spider(metaclass=ABCMeta):
     def __init__(self, ruler_class):
         self.ruler = ruler_class(self)
+        self.session = None
+        self.reset_session()
         self.url = ''
         self.text = ''
         self.result = []
@@ -495,8 +524,7 @@ class Spider(metaclass=ABCMeta):
         soup = None
         while r is None or soup is None:
             try:
-                headers = {'User-Agent': self.ruler.user_agent}
-                r = requests.get(url, params=params, headers=headers)
+                r = self.session.get(url, params=params)
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
@@ -545,6 +573,25 @@ class Spider(metaclass=ABCMeta):
                 continue
         self.last_request_time = datetime.now()
         return final_url
+
+    def reset_session(self):
+        self.session = requests.Session()
+        self.session.headers.update({
+            'Accept': 'text/html,application/xhtml+xml,application/xml;'
+                      'q=0.9,image/webp,image/apng,*/*;'
+                      'q=0.8,application/signed-exchange;'
+                      'v=b3',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Pragma': 'no-cache',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': self.ruler.user_agent,
+        })
 
 
 class RankSpider(Spider):
@@ -611,14 +658,20 @@ class RankSpider(Spider):
 
     def get_rank(self, index, keyword, domain_set):
         print('开始抓取第%s个关键词：%s' % (index, keyword))
+        self.reset_session()
+        page_url = None
         for i in range(PAGE):
-            self.get_page(i + 1, keyword, domain_set)
+            page_url = self.get_page(i + 1, keyword, domain_set, page_url)
         self.searched_keywords.append(keyword)
 
-    def get_page(self, page, keyword, domain_set):
+    def get_page(self, page, keyword, domain_set, page_url):
         print('开始第%d页' % page)
-        params = self.ruler.get_params(keyword, page)
-        (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
+        if page_url:
+            (r, soup, all_item) = self.safe_request(page_url)
+        else:
+            params = self.ruler.get_params(keyword, page)
+            (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
+        print('本页实际请求URL为%s' % r.url)
         rank = 1
         for item in all_item:
             try:
@@ -631,7 +684,7 @@ class RankSpider(Spider):
                 print('本页第%s条URL为%s' % (rank, url))
                 netloc = urlparse(url).netloc
                 for domain in domain_set:
-                    if domain in netloc:
+                    if domain == '*' or domain in netloc:
                         self.result.append((
                             domain,
                             keyword,
@@ -643,6 +696,7 @@ class RankSpider(Spider):
                         ))
                         break
                 rank += 1
+        return self.ruler.get_next_page_url(soup)
 
     def save_result(self):
         if not self.started:
@@ -652,7 +706,8 @@ class RankSpider(Spider):
         ws = wb.active
         ws.append(('域名', '关键词', '搜索引擎', '页数', '排名', '真实地址', '标题', '查询时间'))
         for (domain, keyword, page, rank, url, title, date_time) in self.result:
-            ws.append((domain, keyword, self.ruler.engine_name, page, rank, url, title, date_time))
+            time_str = date_time.strftime('%Y/%m/%d')
+            ws.append((domain, keyword, self.ruler.engine_name, page, rank, url, title, time_str))
         wb.save(file_name)
         self.result = []
         print('查询结束，查询结果保存在 %s' % file_name)
@@ -716,15 +771,20 @@ class SiteSpider(Spider):
         print('开始查找的域名为 %s' % domain)
         self.domain_titles_map[domain] = []
         page = 1
-        soup = self.get_page(domain, page)
+        soup = self.get_page(domain, page, None)
+        page_url = self.ruler.get_next_page_url(soup)
         while soup and self.ruler.has_next_page(soup):
             page += 1
-            soup = self.get_page(domain, page)
+            soup = self.get_page(domain, page, page_url)
+            page_url = self.ruler.get_next_page_url(soup)
 
-    def get_page(self, domain, page):
+    def get_page(self, domain, page, page_url):
         print('开始第%d页' % page)
         params = self.ruler.get_params('site:%s' % domain, page)
-        (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
+        if page_url:
+            (r, soup, all_item) = self.safe_request(page_url)
+        else:
+            (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
         for item in all_item:
             self.domain_titles_map[domain].append(self.ruler.get_title(item))
         return soup
