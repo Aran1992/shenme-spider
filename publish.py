@@ -34,7 +34,7 @@ def status_spider():
     zipf.close()
 
 
-mode = input('所有工具：0/打包排名爬虫：1/打包核对工具：2/状态查询工具：3')
+mode = input('所有工具：0\n打包排名爬虫：1\n打包核对工具：2\n状态查询工具：3\n')
 if mode == '0':
     all()
     sp()

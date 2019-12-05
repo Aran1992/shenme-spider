@@ -1,5 +1,6 @@
 import ast
 import os
+import re
 import time
 import traceback
 from abc import ABCMeta, abstractmethod
@@ -37,10 +38,6 @@ def get_url_domain(url):
 
 
 class MyError(RuntimeError):
-    pass
-
-
-class SogouPCSpiderError(RuntimeError):
     pass
 
 
@@ -93,6 +90,9 @@ class SpiderRuler(metaclass=ABCMeta):
 
     def get_next_page_url(self, soup):
         return None
+
+    def is_forbid(self, soup):
+        return False
 
 
 class SMRuler(SpiderRuler):
@@ -179,11 +179,7 @@ class SogouPCRuler(SpiderRuler):
         return True, ''
 
     def get_all_item(self, soup):
-        results = soup.find('div', class_='results')
-        if results:
-            return results.find_all('div', recursive=False)
-        else:
-            raise SogouPCSpiderError('该IP已被判定为爬虫，暂时无法获取到信息，将稍后尝试重新获取')
+        return soup.find('div', class_='results').find_all('div', recursive=False)
 
     def get_url(self, item):
         link = item.find('a')
@@ -194,6 +190,9 @@ class SogouPCRuler(SpiderRuler):
 
     def has_next_page(self, soup):
         return soup.find(id='sogou_next')
+
+    def is_forbid(self, soup):
+        return soup.find('div', class_='results') is not None
 
 
 class SogouMobileRuler(SpiderRuler):
@@ -383,6 +382,112 @@ class BaiduMobileRuler(SpiderRuler):
                 return urljoin(self.base_url, href)
 
 
+class SLLPCRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', '360pc_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' \
+               'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36'
+
+    @property
+    def base_url(self):
+        return 'https://www.so.com/s'
+
+    @property
+    def engine_name(self):
+        return '360PC'
+
+    def get_params(self, keyword, page):
+        return {
+            'q': keyword,
+            'pn': page,
+            'src': 'srp_paging',
+        }
+
+    def get_all_item(self, soup):
+        return soup.find_all(lambda a: a and a.has_attr('data-res'))
+
+    def get_url(self, item):
+        return item.get('href')
+
+    def get_title(self, item):
+        return ''.join(item.findAll(text=lambda text: not isinstance(text, Comment)))
+
+    def has_next_page(self, soup):
+        return soup.find('a', id='snext') is not None
+
+    def is_forbid(self, soup):
+        reg = re.compile('亲，系统检测到您操作过于频繁。')
+        tag = soup.find_all(text=reg)
+        return len(tag) > 0
+
+
+class SLLMobileRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', '360mobile_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/78.0.3904.108 Mobile Safari/537.36'
+
+    @property
+    def base_url(self):
+        return 'https://m.so.com/nextpage'
+
+    @property
+    def engine_name(self):
+        return '360MOBILE'
+
+    def get_params(self, keyword, page):
+        return {
+            'q': keyword,
+            'src': 'result_input',
+            'srcg': 'home_next',
+            'pn': page,
+            'ajax': 1,
+        }
+
+    def get_all_item(self, soup):
+        return soup.find_all(lambda div: div and div.has_attr('data-pcurl'))
+
+    def get_url(self, item):
+        return item.get('data-pcurl')
+
+    def get_title(self, item):
+        title = item.find('h3', class_='res-title')
+        if title:
+            return ''.join(title.findAll(text=lambda text: not isinstance(text, Comment)))
+        else:
+            return ''
+
+    def has_next_page(self, soup):
+        reg = re.compile('.*MSO.hasNextPage = true;.*')
+        tag = soup.find_all(text=reg)
+        return len(tag) > 0
+
+    def is_forbid(self, soup):
+        reg = re.compile('请输入验证码以便正常访问')
+        tag = soup.find_all(text=reg)
+        return len(tag) > 0
+
+
 class LittleRankSpider:
     def __init__(self, spider):
         self.spider = spider
@@ -542,12 +647,11 @@ class Spider(metaclass=ABCMeta):
                 time.sleep(self.error_interval_time)
                 continue
         self.last_request_time = datetime.now()
-        try:
-            items = self.ruler.get_all_item(soup)
-        except SogouPCSpiderError as e:
-            print(e)
+        if self.ruler.is_forbid(soup):
+            print(f'该IP已被判定为爬虫，暂时无法获取到信息，{self.error_interval_time}秒后尝试重新获取')
             time.sleep(self.error_interval_time)
             return self.safe_request(url, params=params)
+        items = self.ruler.get_all_item(soup)
         return r, soup, items
 
     def get_real_url(self, start_url):
@@ -661,7 +765,9 @@ class RankSpider(Spider):
         self.reset_session()
         page_url = None
         for i in range(PAGE):
-            page_url = self.get_page(i + 1, keyword, domain_set, page_url)
+            page_url, soup = self.get_page(i + 1, keyword, domain_set, page_url)
+            if not soup or not self.ruler.has_next_page(soup):
+                break
         self.searched_keywords.append(keyword)
 
     def get_page(self, page, keyword, domain_set, page_url):
@@ -696,7 +802,7 @@ class RankSpider(Spider):
                         ))
                         break
                 rank += 1
-        return self.ruler.get_next_page_url(soup)
+        return self.ruler.get_next_page_url(soup), soup
 
     def save_result(self):
         if not self.started:

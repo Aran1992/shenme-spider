@@ -11,7 +11,9 @@ if __name__ == '__main__':
         (SogouPCRuler, '搜狗PC'),
         (SogouMobileRuler, '搜狗MOBILE'),
         (BaiduPCRuler, '百度PC'),
-        (BaiduMobileRuler, '百度MOBILE')
+        (BaiduMobileRuler, '百度MOBILE'),
+        (SLLPCRuler, '360PC'),
+        (SLLMobileRuler, '360MOBILE'),
     ]
     spider_index = input('''要查找什么数据？
 %s
