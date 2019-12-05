@@ -1,5 +1,6 @@
 import ast
 import os
+import re
 import time
 import traceback
 from abc import ABCMeta, abstractmethod
@@ -361,6 +362,102 @@ class BaiduMobileRuler(SpiderRuler):
 
     def has_next_page(self, soup):
         return soup.find('a', class_='new-nextpage-only') or soup.find('a', class_='new-nextpage')
+
+
+class SLLPCRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', '360pc_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' \
+               'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36'
+
+    @property
+    def base_url(self):
+        return 'https://www.so.com/s'
+
+    @property
+    def engine_name(self):
+        return '360PC'
+
+    def get_params(self, keyword, page):
+        return {
+            'q': '旅法师营地',
+            'pn': page,
+            'src': 'srp_paging',
+        }
+
+    def get_all_item(self, soup):
+        return soup.find_all(lambda a: a and a.has_attr('data-res'))
+
+    def get_url(self, item):
+        return item.get('href')
+
+    def get_title(self, item):
+        return ''.join(item.findAll(text=lambda text: not isinstance(text, Comment)))
+
+    def has_next_page(self, soup):
+        return soup.find('a', id='snext') is not None
+
+
+class SLLMobileRuler(SpiderRuler):
+    def __init__(self, spider):
+        SpiderRuler.__init__(self, spider)
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        self.__request_interval_time = float(cfg.get('config', '360mobile_request_interval_time'))
+
+    @property
+    def request_interval_time(self):
+        return self.__request_interval_time
+
+    @property
+    def user_agent(self):
+        return 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+               'Chrome/78.0.3904.108 Mobile Safari/537.36'
+
+    @property
+    def base_url(self):
+        return 'https://m.so.com/nextpage'
+
+    @property
+    def engine_name(self):
+        return '360MOBILE'
+
+    def get_params(self, keyword, page):
+        return {
+            'q': keyword,
+            'src': 'result_input',
+            'srcg': 'home_next',
+            'pn': page,
+            'ajax': 1,
+        }
+
+    def get_all_item(self, soup):
+        return soup.find_all(lambda div: div and div.has_attr('data-pcurl'))
+
+    def get_url(self, item):
+        return item.get('data-pcurl')
+
+    def get_title(self, item):
+        title = item.find('h3', class_='res-title')
+        if title:
+            return ''.join(title.findAll(text=lambda text: not isinstance(text, Comment)))
+        else:
+            return ''
+
+    def has_next_page(self, soup):
+        reg = re.compile('.*MSO.hasNextPage = true;.*')
+        tag = soup.find_all(text=reg)
+        return len(tag) > 0
 
 
 class LittleRankSpider:
