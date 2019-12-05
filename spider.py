@@ -41,10 +41,6 @@ class MyError(RuntimeError):
     pass
 
 
-class SogouPCSpiderError(RuntimeError):
-    pass
-
-
 class SpiderRuler(metaclass=ABCMeta):
     def __init__(self, spider):
         self.spider = spider
@@ -91,6 +87,9 @@ class SpiderRuler(metaclass=ABCMeta):
     @abstractmethod
     def has_next_page(self, soup):
         pass
+
+    def is_forbid(self, soup):
+        return False
 
 
 class SMRuler(SpiderRuler):
@@ -176,11 +175,7 @@ class SogouPCRuler(SpiderRuler):
         return True, ''
 
     def get_all_item(self, soup):
-        results = soup.find('div', class_='results')
-        if results:
-            return results.find_all('div', recursive=False)
-        else:
-            raise SogouPCSpiderError('该IP已被判定为爬虫，暂时无法获取到信息，将稍后尝试重新获取')
+        return soup.find('div', class_='results').find_all('div', recursive=False)
 
     def get_url(self, item):
         link = item.find('a')
@@ -191,6 +186,9 @@ class SogouPCRuler(SpiderRuler):
 
     def has_next_page(self, soup):
         return soup.find(id='sogou_next')
+
+    def is_forbid(self, soup):
+        return soup.find('div', class_='results') is not None
 
 
 class SogouMobileRuler(SpiderRuler):
@@ -407,6 +405,11 @@ class SLLPCRuler(SpiderRuler):
     def has_next_page(self, soup):
         return soup.find('a', id='snext') is not None
 
+    def is_forbid(self, soup):
+        reg = re.compile('亲，系统检测到您操作过于频繁。')
+        tag = soup.find_all(text=reg)
+        return len(tag) > 0
+
 
 class SLLMobileRuler(SpiderRuler):
     def __init__(self, spider):
@@ -456,6 +459,11 @@ class SLLMobileRuler(SpiderRuler):
 
     def has_next_page(self, soup):
         reg = re.compile('.*MSO.hasNextPage = true;.*')
+        tag = soup.find_all(text=reg)
+        return len(tag) > 0
+
+    def is_forbid(self, soup):
+        reg = re.compile('请输入验证码以便正常访问')
         tag = soup.find_all(text=reg)
         return len(tag) > 0
 
@@ -611,12 +619,13 @@ class Spider(metaclass=ABCMeta):
                 time.sleep(self.error_interval_time)
                 continue
         self.last_request_time = datetime.now()
-        try:
-            items = self.ruler.get_all_item(soup)
-        except SogouPCSpiderError as e:
-            print(e)
+        if self.ruler.is_forbid(soup):
+            with open(f'1.html', 'w', encoding='utf-8') as f:
+                f.write(r.url + '\n' + r.text)
+            print('该IP已被判定为爬虫，暂时无法获取到信息，将稍后尝试重新获取')
             time.sleep(self.error_interval_time)
             return self.safe_request(url, params=params)
+        items = self.ruler.get_all_item(soup)
         return r, soup, items
 
     def get_real_url(self, start_url):
@@ -709,7 +718,9 @@ class RankSpider(Spider):
     def get_rank(self, index, keyword, domain_set):
         print('开始抓取第%s个关键词：%s' % (index, keyword))
         for i in range(PAGE):
-            self.get_page(i + 1, keyword, domain_set)
+            soup = self.get_page(i + 1, keyword, domain_set)
+            if not soup or not self.ruler.has_next_page(soup):
+                break
         self.searched_keywords.append(keyword)
 
     def get_page(self, page, keyword, domain_set):
@@ -740,6 +751,7 @@ class RankSpider(Spider):
                         ))
                         break
                 rank += 1
+        return soup
 
     def save_result(self):
         if not self.started:
