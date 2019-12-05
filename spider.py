@@ -388,7 +388,7 @@ class SLLPCRuler(SpiderRuler):
 
     def get_params(self, keyword, page):
         return {
-            'q': '旅法师营地',
+            'q': keyword,
             'pn': page,
             'src': 'srp_paging',
         }
@@ -620,9 +620,7 @@ class Spider(metaclass=ABCMeta):
                 continue
         self.last_request_time = datetime.now()
         if self.ruler.is_forbid(soup):
-            with open(f'1.html', 'w', encoding='utf-8') as f:
-                f.write(r.url + '\n' + r.text)
-            print('该IP已被判定为爬虫，暂时无法获取到信息，将稍后尝试重新获取')
+            print(f'该IP已被判定为爬虫，暂时无法获取到信息，{self.error_interval_time}秒后尝试重新获取')
             time.sleep(self.error_interval_time)
             return self.safe_request(url, params=params)
         items = self.ruler.get_all_item(soup)
