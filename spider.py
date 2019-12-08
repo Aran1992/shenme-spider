@@ -417,7 +417,11 @@ class SLLPCRuler(SpiderRuler):
         return soup.find_all(lambda a: a and a.has_attr('data-res'))
 
     def get_url(self, item):
-        return item.get('data-cache')
+        arr = ['data-cache', 'data-url', 'href']
+        for key in arr:
+            url = item.get(key)
+            if url:
+                return url
 
     def get_title(self, item):
         return ''.join(item.findAll(text=lambda text: not isinstance(text, Comment)))
