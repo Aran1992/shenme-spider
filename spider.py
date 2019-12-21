@@ -358,7 +358,7 @@ class BaiduMobileRuler(SpiderRuler):
     def get_all_item(self, soup):
         div_root = soup.find('div', id='results')
         if div_root:
-            return div_root.find_all('div', recursive=False)
+            return div_root.find_all('div', class_='c-result result')
         else:
             return []
 
@@ -366,10 +366,17 @@ class BaiduMobileRuler(SpiderRuler):
         data_log_str = item.get('data-log')
         if data_log_str:
             data_log = ast.literal_eval(data_log_str)
-            return data_log.get('mu')
+            if data_log:
+                mu = data_log.get('mu')
+                if mu and len(mu) > 0:
+                    return mu
 
     def get_title(self, item):
-        return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
+        a = item.find('a')
+        if a:
+            return ''.join(a.findAll(text=lambda text: not isinstance(text, Comment)))
+        else:
+            return ''
 
     def has_next_page(self, soup):
         return soup.find('a', class_='new-nextpage-only') or soup.find('a', class_='new-nextpage')
