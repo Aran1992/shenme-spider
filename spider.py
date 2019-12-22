@@ -659,8 +659,6 @@ class Spider(metaclass=ABCMeta):
                 continue
         self.last_request_time = datetime.now()
         if self.ruler.is_forbid(soup):
-            with open('2.html', 'w', encoding='utf-8') as f:
-                f.write(soup.prettify())
             print(f'该IP已被判定为爬虫，暂时无法获取到信息，{self.error_interval_time}秒后尝试重新获取')
             time.sleep(self.error_interval_time)
             return self.safe_request(url, params=params)
