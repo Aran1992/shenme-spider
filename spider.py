@@ -94,6 +94,10 @@ class SpiderRuler(metaclass=ABCMeta):
     def is_forbid(self, soup):
         return False
 
+    @property
+    def enable_session(self):
+        return True
+
 
 class SMRuler(SpiderRuler):
     def __init__(self, spider):
@@ -193,6 +197,10 @@ class SogouPCRuler(SpiderRuler):
 
     def is_forbid(self, soup):
         return soup.find('div', class_='results') is None
+
+    @property
+    def enable_session(self):
+        return False
 
 
 class SogouMobileRuler(SpiderRuler):
@@ -640,7 +648,7 @@ class Spider(metaclass=ABCMeta):
         soup = None
         while r is None or soup is None:
             try:
-                r = self.session.get(url, params=params)
+                r = self.get(url, params=params)
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
@@ -690,8 +698,18 @@ class Spider(metaclass=ABCMeta):
         return final_url
 
     def reset_session(self):
-        self.session = requests.Session()
-        self.session.headers.update({
+        if self.ruler.enable_session:
+            self.session = requests.Session()
+            self.session.headers.update(self.get_headers())
+
+    def get(self, url, *, params=None):
+        if self.ruler.enable_session:
+            return self.session.get(url, params=params)
+        else:
+            return requests.get(url, params=params, headers=self.get_headers())
+
+    def get_headers(self):
+        return {
             'Accept': 'text/html,application/xhtml+xml,application/xml;'
                       'q=0.9,image/webp,image/apng,*/*;'
                       'q=0.8,application/signed-exchange;'
@@ -706,7 +724,7 @@ class Spider(metaclass=ABCMeta):
             'Sec-Fetch-User': '?1',
             'Upgrade-Insecure-Requests': '1',
             'User-Agent': self.ruler.user_agent,
-        })
+        }
 
 
 class RankSpider(Spider):
