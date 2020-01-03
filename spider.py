@@ -266,6 +266,10 @@ class SogouMobileRuler(SpiderRuler):
         li = soup.find('p').find(text=True).strip().split(',')
         return int(li[0]) > int(li[1])
 
+    @property
+    def enable_session(self):
+        return False
+
 
 class BaiduPCRuler(SpiderRuler):
     def __init__(self, spider):
