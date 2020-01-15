@@ -663,7 +663,9 @@ class Spider(metaclass=ABCMeta):
             try:
                 r = self.get(url, params=params)
             # todo 准确判断是否真的是网络断开 来确定是否要等待网络重连
-            except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
+            except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as error:
+                print('网络断开时请求的URL为：%s' % url)
+                print('认为是网络断开的错误是：%s' % error)
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
                 continue
