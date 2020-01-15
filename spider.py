@@ -441,7 +441,7 @@ class SLLPCRuler(SpiderRuler):
         return soup.find_all(lambda a: a and a.has_attr('data-res'))
 
     def get_url(self, item):
-        arr = ['data-cache', 'data-url', 'href']
+        arr = ['data-mdurl', 'data-cache', 'data-url', 'href']
         for key in arr:
             url = item.get(key)
             if url:
