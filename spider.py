@@ -6,7 +6,7 @@ import traceback
 from abc import ABCMeta, abstractmethod
 from configparser import ConfigParser
 from datetime import datetime
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, parse_qsl, urlsplit, urljoin
 
 import requests
 from bs4 import BeautifulSoup, Comment
@@ -82,7 +82,7 @@ class SpiderRuler(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_url(self, item):
+    def get_url(self, item, page_url):
         pass
 
     @abstractmethod
@@ -141,7 +141,7 @@ class SMRuler(SpiderRuler):
     def get_all_item(self, soup):
         return soup.find_all('div', class_='ali_row')
 
-    def get_url(self, item):
+    def get_url(self, item, page_url):
         link = item.find('a')
         return link and link.get('href')
 
@@ -190,7 +190,7 @@ class SogouPCRuler(SpiderRuler):
     def get_all_item(self, soup):
         return soup.find('div', class_='results').find_all('div', recursive=False)
 
-    def get_url(self, item):
+    def get_url(self, item, page_url):
         link = item.find('a')
         return link and link.get('href')
 
@@ -241,28 +241,32 @@ class SogouMobileRuler(SpiderRuler):
     def get_all_item(self, soup):
         return soup.find_all('a', class_='resultLink')
 
-    def get_url(self, item):
+    def get_url(self, item, page_url):
         url = item.get('href')
         if url.startswith('javascript'):
             return None
         elif url.startswith('http'):
             return url
         else:
-            url = urljoin(self.spider.url, url)
-            (r, sub_soup, _) = self.spider.safe_request(url)
-            if r.url.startswith('http://wap.sogou.com/transcoding/sweb') \
-                    or r.url.startswith('http://m.sogou.com/transcoding/sweb') \
-                    or r.url.startswith('http://wap.sogou.com/web/search/'):
-                btn = sub_soup.find('div', class_='btn')
-                if btn:
-                    link = btn.find('a')
-                else:
-                    # 个别情况下 会发生页面里面没有class为btn的div的情况
-                    link = sub_soup.find('a')
-                if link:
-                    return link.get('href')
+            url = urljoin(page_url, url)
+            query = dict(parse_qsl(urlsplit(url).query))
+            if 'url' in query:
+                return query['url']
             else:
-                return r.url
+                (r, sub_soup, _) = self.spider.safe_request(url)
+                if r.url.startswith('http://wap.sogou.com/transcoding/sweb') \
+                        or r.url.startswith('http://m.sogou.com/transcoding/sweb') \
+                        or r.url.startswith('http://wap.sogou.com/web/search/'):
+                    btn = sub_soup.find('div', class_='btn')
+                    if btn:
+                        link = btn.find('a')
+                    else:
+                        # 个别情况下 会发生页面里面没有class为btn的div的情况
+                        link = sub_soup.find('a')
+                    if link:
+                        return link.get('href')
+                else:
+                    return r.url
 
     def get_title(self, item):
         return ''.join(item.findAll(text=lambda text: not isinstance(text, Comment)))
@@ -313,7 +317,7 @@ class BaiduPCRuler(SpiderRuler):
         else:
             return []
 
-    def get_url(self, item):
+    def get_url(self, item, page_url):
         link = item.find('a')
         if link:
             url = link.get('href')
@@ -379,7 +383,7 @@ class BaiduMobileRuler(SpiderRuler):
         else:
             return []
 
-    def get_url(self, item):
+    def get_url(self, item, page_url):
         data_log_str = item.get('data-log')
         if data_log_str:
             data_log = ast.literal_eval(data_log_str)
@@ -440,7 +444,7 @@ class SLLPCRuler(SpiderRuler):
     def get_all_item(self, soup):
         return soup.find_all(lambda a: a and a.has_attr('data-res'))
 
-    def get_url(self, item):
+    def get_url(self, item, page_url):
         arr = ['data-mdurl', 'data-cache', 'data-url', 'href']
         for key in arr:
             url = item.get(key)
@@ -495,7 +499,7 @@ class SLLMobileRuler(SpiderRuler):
     def get_all_item(self, soup):
         return soup.find_all(lambda div: div and div.has_attr('data-pcurl'))
 
-    def get_url(self, item):
+    def get_url(self, item, page_url):
         return item.get('data-pcurl')
 
     def get_title(self, item):
@@ -552,7 +556,7 @@ class LittleRankSpider:
         rank = 1
         for item in all_item:
             try:
-                url = ruler.get_url(item)
+                url = ruler.get_url(item, r.url)
             except:
                 url = None
                 self.error_list.append(traceback.format_exc())
@@ -658,6 +662,7 @@ class Spider(metaclass=ABCMeta):
         while r is None or soup is None:
             try:
                 r = self.get(url, params=params)
+            # todo 准确判断是否真的是网络断开 来确定是否要等待网络重连
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
@@ -667,18 +672,18 @@ class Spider(metaclass=ABCMeta):
                 print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
                 time.sleep(self.error_interval_time)
                 continue
-            self.url = r.url
-            self.text = r.text
             soup = BeautifulSoup(r.text, 'lxml')
             if soup.body is None:
                 print('请求到的页面的内容为空，为防止IP被封禁，%s秒之后尝试重新抓取' % self.error_interval_time)
                 time.sleep(self.error_interval_time)
                 continue
+            if self.ruler.is_forbid(soup):
+                print(f'该IP已被判定为爬虫，暂时无法获取到信息，{self.error_interval_time}秒后尝试重新获取')
+                time.sleep(self.error_interval_time)
+                continue
         self.last_request_time = datetime.now()
-        if self.ruler.is_forbid(soup):
-            print(f'该IP已被判定为爬虫，暂时无法获取到信息，{self.error_interval_time}秒后尝试重新获取')
-            time.sleep(self.error_interval_time)
-            return self.safe_request(url, params=params)
+        self.url = r.url
+        self.text = r.text
         items = self.ruler.get_all_item(soup)
         return r, soup, items
 
@@ -819,7 +824,7 @@ class RankSpider(Spider):
         rank = 1
         for item in all_item:
             try:
-                url = self.ruler.get_url(item)
+                url = self.ruler.get_url(item, r.url)
             except:
                 url = None
                 self.error_list.append(traceback.format_exc())
