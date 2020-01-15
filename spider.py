@@ -31,10 +31,15 @@ def format_cd_time(seconds):
     return "%d小时%02d分%02d秒" % (h, m, s)
 
 
-def get_url_domain(url):
-    li = urlparse(url).netloc.split('.')
-    length = len(li)
-    return '{}.{}'.format(li[length - 2], li[length - 1])
+def is_list_include_another_list(child_list, parent_list):
+    if child_list[0] in parent_list:
+        index = parent_list.index(child_list[0])
+        for i, child in enumerate(child_list):
+            if child not in parent_list or parent_list.index(child) != index + i:
+                return False
+        return True
+    else:
+        return False
 
 
 class MyError(RuntimeError):
@@ -554,9 +559,9 @@ class LittleRankSpider:
                 traceback.print_exc()
             if url is not None:
                 print('本页第%s条URL为%s' % (rank, url))
-                netloc = urlparse(url).netloc
+                item_list = urlparse(url).netloc.split('.')
                 for domain in domain_set:
-                    if domain in netloc:
+                    if domain == '*' or is_list_include_another_list(domain.split('.'), item_list):
                         result.append((
                             domain,
                             keyword,
@@ -821,9 +826,9 @@ class RankSpider(Spider):
                 traceback.print_exc()
             if url is not None:
                 print('本页第%s条URL为%s' % (rank, url))
-                netloc = urlparse(url).netloc
+                item_list = urlparse(url).netloc.split('.')
                 for domain in domain_set:
-                    if domain == '*' or domain in netloc:
+                    if domain == '*' or is_list_include_another_list(domain.split('.'), item_list):
                         self.result.append((
                             domain,
                             keyword,
