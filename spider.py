@@ -815,9 +815,13 @@ class RankSpider(Spider):
         self.reset_session()
         page_url = None
         for i in range(PAGE):
-            page_url, soup = self.get_page(i + 1, keyword, domain_set, page_url)
-            if not soup or not self.ruler.has_next_page(soup):
-                break
+            try:
+                page_url, soup = self.get_page(i + 1, keyword, domain_set, page_url)
+                if not soup or not self.ruler.has_next_page(soup):
+                    break
+            except:
+                self.error_list.append('\n关键词：%s，页数：%s，错误：\n%s\n' % (keyword, i + 1, traceback.format_exc()))
+                traceback.print_exc()
         self.searched_keywords.append(keyword)
 
     def get_page(self, page, keyword, domain_set, page_url):
@@ -830,12 +834,7 @@ class RankSpider(Spider):
         print('本页实际请求URL为%s' % r.url)
         rank = 1
         for item in all_item:
-            try:
-                url = self.ruler.get_url(item, r.url)
-            except:
-                url = None
-                self.error_list.append(traceback.format_exc())
-                traceback.print_exc()
+            url = self.ruler.get_url(item, r.url)
             if url is not None:
                 print('本页第%s条URL为%s' % (rank, url))
                 item_list = urlparse(url).netloc.split('.')
