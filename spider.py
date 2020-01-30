@@ -386,11 +386,16 @@ class BaiduMobileRuler(SpiderRuler):
     def get_url(self, item, page_url):
         data_log_str = item.get('data-log')
         if data_log_str:
-            data_log = ast.literal_eval(data_log_str)
-            if data_log:
-                mu = data_log.get('mu')
-                if mu and len(mu) > 0:
-                    return mu
+            try:
+                ast.literal_eval(data_log_str)
+                data_log = ast.literal_eval(data_log_str)
+                if data_log:
+                    mu = data_log.get('mu')
+                    if mu and len(mu) > 0:
+                        return mu
+            except SyntaxError:
+                result = re.search(r"'mu':'(.*?)''", data_log_str)
+                return result.group(1)
 
     def get_title(self, item):
         a = item.find('a')
