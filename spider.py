@@ -75,7 +75,7 @@ class SpiderRuler(metaclass=ABCMeta):
         pass
 
     def check_url(self, url):
-        return True, ''
+        return True, None
 
     @abstractmethod
     def get_all_item(self, soup):
@@ -820,7 +820,7 @@ class RankSpider(Spider):
                 if not soup or not self.ruler.has_next_page(soup):
                     break
             except:
-                self.error_list.append('\n关键词：%s，页数：%s，错误：\n%s\n' % (keyword, i + 1, traceback.format_exc()))
+                self.error_list.append('关键词：%s，页数：%s，错误：\n%s' % (keyword, i + 1, traceback.format_exc()))
                 traceback.print_exc()
         self.searched_keywords.append(keyword)
 
@@ -886,7 +886,7 @@ class RankSpider(Spider):
     def save_error_list(self, err_list):
         if len(err_list) == 0:
             return
-        filename = f'排名查询过程中产生的错误-${self.ruler.engine_name}-${get_cur_time_filename()}.log'
+        filename = f'排名查询过程中产生的错误-{self.ruler.engine_name}-{get_cur_time_filename()}.log'
         with open(filename, 'w', encoding='utf-8') as f:
             f.write('\n\n'.join(err_list))
         print(filename)
@@ -1053,7 +1053,7 @@ class CheckSpider(Spider):
     def save_error_list(self, err_list):
         if len(err_list) == 0:
             return
-        filename = f'核对过程中产生的错误-${self.ruler.engine_name}-${get_cur_time_filename()}.log'
+        filename = f'核对过程中产生的错误-{self.ruler.engine_name}-{get_cur_time_filename()}.log'
         with open(filename, 'w', encoding='utf-8') as f:
             f.write('\n\n'.join(err_list))
         print(filename)
