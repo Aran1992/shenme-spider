@@ -398,7 +398,7 @@ class BaiduMobileRuler(SpiderRuler):
                 return result.group(1)
 
     def get_title(self, item):
-        a = item.find('a')
+        a = item.find('span', class_='c-title-text')
         if a:
             return ''.join(a.findAll(text=lambda text: not isinstance(text, Comment)))
         else:
@@ -831,6 +831,8 @@ class RankSpider(Spider):
         else:
             params = self.ruler.get_params(keyword, page)
             (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
+        # with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
+        #     f.write(soup.prettify())
         print('本页实际请求URL为%s' % r.url)
         rank = 1
         for item in all_item:
