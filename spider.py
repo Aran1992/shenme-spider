@@ -74,7 +74,7 @@ class SpiderRuler(metaclass=ABCMeta):
     def get_params(self, keyword, page):
         pass
 
-    def check_url(self, url):
+    def check_response(self, response):
         return True, None
 
     @abstractmethod
@@ -182,8 +182,8 @@ class SogouPCRuler(SpiderRuler):
             'page': page,
         }
 
-    def check_url(self, url):
-        if url.startswith('http://www.sogou.com/antispider'):
+    def check_response(self, response):
+        if response.url.startswith('http://www.sogou.com/antispider'):
             return False, '该IP已经被搜狗引擎封禁'
         return True, ''
 
@@ -278,6 +278,15 @@ class SogouMobileRuler(SpiderRuler):
     @property
     def enable_session(self):
         return False
+
+    def check_response(self, response):
+        soup = BeautifulSoup(response.text, 'lxml')
+        if len(soup.body.contents) == 0:
+            return False, '该IP已经被搜狗引擎封禁'
+        for s in soup.body.contents[0].stripped_strings:
+            if s == '403':
+                return False, '该IP已经被搜狗引擎封禁'
+        return True, ''
 
 
 class BaiduPCRuler(SpiderRuler):
@@ -674,7 +683,7 @@ class Spider(metaclass=ABCMeta):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
                 continue
-            (ok, msg) = self.ruler.check_url(r.url)
+            (ok, msg) = self.ruler.check_response(r)
             if not ok:
                 print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
                 time.sleep(self.error_interval_time)
@@ -710,7 +719,7 @@ class Spider(metaclass=ABCMeta):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
                 continue
-            (ok, msg) = self.ruler.check_url(final_url)
+            (ok, msg) = self.ruler.check_response(r)
             if not ok:
                 print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
                 time.sleep(self.error_interval_time)
@@ -831,8 +840,8 @@ class RankSpider(Spider):
         else:
             params = self.ruler.get_params(keyword, page)
             (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
-        # with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
-        #     f.write(soup.prettify())
+        with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
+            f.write(soup.prettify())
         print('本页实际请求URL为%s' % r.url)
         rank = 1
         for item in all_item:
