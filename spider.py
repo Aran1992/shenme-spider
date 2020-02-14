@@ -74,8 +74,8 @@ class SpiderRuler(metaclass=ABCMeta):
     def get_params(self, keyword, page):
         pass
 
-    def check_response(self, response):
-        return True, None
+    def is_forbid(self, r, soup):
+        return False
 
     @abstractmethod
     def get_all_item(self, soup):
@@ -95,9 +95,6 @@ class SpiderRuler(metaclass=ABCMeta):
 
     def get_next_page_url(self, soup):
         return None
-
-    def is_forbid(self, soup):
-        return False
 
     @property
     def enable_session(self):
@@ -151,6 +148,9 @@ class SMRuler(SpiderRuler):
     def has_next_page(self, soup):
         return soup.find('a', class_='next')
 
+    def is_forbid(self, r, soup):
+        return soup.body is None
+
 
 class SogouPCRuler(SpiderRuler):
     def __init__(self, spider):
@@ -182,10 +182,9 @@ class SogouPCRuler(SpiderRuler):
             'page': page,
         }
 
-    def check_response(self, response):
-        if response.url.startswith('http://www.sogou.com/antispider'):
-            return False, '该IP已经被搜狗引擎封禁'
-        return True, ''
+    def is_forbid(self, r, soup):
+        return r.url.startswith('http://www.sogou.com/antispider') \
+               or soup.find('div', class_='results') is None
 
     def get_all_item(self, soup):
         return soup.find('div', class_='results').find_all('div', recursive=False)
@@ -199,9 +198,6 @@ class SogouPCRuler(SpiderRuler):
 
     def has_next_page(self, soup):
         return soup.find(id='sogou_next')
-
-    def is_forbid(self, soup):
-        return soup.find('div', class_='results') is None
 
     @property
     def enable_session(self):
@@ -279,14 +275,12 @@ class SogouMobileRuler(SpiderRuler):
     def enable_session(self):
         return False
 
-    def check_response(self, response):
-        soup = BeautifulSoup(response.text, 'lxml')
+    def is_forbid(self, r, soup):
         if len(soup.body.contents) == 0:
-            return False, '该IP已经被搜狗引擎封禁'
+            return True
         for s in soup.body.contents[0].stripped_strings:
             if s == '403':
-                return False, '该IP已经被搜狗引擎封禁'
-        return True, ''
+                return True
 
 
 class BaiduPCRuler(SpiderRuler):
@@ -471,7 +465,7 @@ class SLLPCRuler(SpiderRuler):
     def has_next_page(self, soup):
         return soup.find('a', id='snext') is not None
 
-    def is_forbid(self, soup):
+    def is_forbid(self, r, soup):
         reg = re.compile('亲，系统检测到您操作过于频繁。')
         tag = soup.find_all(text=reg)
         return len(tag) > 0
@@ -528,7 +522,7 @@ class SLLMobileRuler(SpiderRuler):
         tag = soup.find_all(text=reg)
         return len(tag) > 0
 
-    def is_forbid(self, soup):
+    def is_forbid(self, r, soup):
         reg = re.compile('请输入验证码以便正常访问')
         tag = soup.find_all(text=reg)
         return len(tag) > 0
@@ -683,19 +677,12 @@ class Spider(metaclass=ABCMeta):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
                 continue
-            (ok, msg) = self.ruler.check_response(r)
-            if not ok:
-                print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
-                time.sleep(self.error_interval_time)
-                continue
             soup = BeautifulSoup(r.text, 'lxml')
-            if soup.body is None:
-                print('请求到的页面的内容为空，为防止IP被封禁，%s秒之后尝试重新抓取' % self.error_interval_time)
+            if self.ruler.is_forbid(r, soup):
+                print('该IP已被判定为爬虫，暂时无法获取到信息，%s秒之后尝试重新抓取' % self.error_interval_time)
                 time.sleep(self.error_interval_time)
-                continue
-            if self.ruler.is_forbid(soup):
-                print(f'该IP已被判定为爬虫，暂时无法获取到信息，{self.error_interval_time}秒后尝试重新获取')
-                time.sleep(self.error_interval_time)
+                r = None
+                soup = None
                 continue
         self.last_request_time = datetime.now()
         self.url = r.url
@@ -719,7 +706,7 @@ class Spider(metaclass=ABCMeta):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
                 continue
-            (ok, msg) = self.ruler.check_response(r)
+            (ok, msg) = self.ruler.is_forbid(r, BeautifulSoup(r.text, 'lxml'))
             if not ok:
                 print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
                 time.sleep(self.error_interval_time)
@@ -840,8 +827,8 @@ class RankSpider(Spider):
         else:
             params = self.ruler.get_params(keyword, page)
             (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
-        with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
-            f.write(soup.prettify())
+        # with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
+        #     f.write(soup.prettify())
         print('本页实际请求URL为%s' % r.url)
         rank = 1
         for item in all_item:
