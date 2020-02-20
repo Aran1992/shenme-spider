@@ -409,6 +409,9 @@ class BaiduMobileRuler(SpiderRuler):
             if href:
                 return urljoin(self.base_url, href)
 
+    def is_forbid(self, r, soup):
+        return r.url.startswith('https://wappass.baidu.com/static/captcha')
+
 
 class SLLPCRuler(SpiderRuler):
     def __init__(self, spider):
@@ -515,9 +518,8 @@ class SLLMobileRuler(SpiderRuler):
         return len(tag) > 0
 
     def is_forbid(self, r, soup):
-        reg = re.compile('请输入验证码以便正常访问')
-        tag = soup.find_all(text=reg)
-        return len(tag) > 0
+        return len(soup.find_all(text=re.compile('请输入验证码以便正常访问'))) > 0 \
+               or r.url.startswith('http://qcaptcha.so.com/?ret=')
 
 
 class LittleRankSpider:
