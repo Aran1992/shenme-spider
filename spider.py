@@ -98,7 +98,7 @@ class SpiderRuler(metaclass=ABCMeta):
 
     @property
     def enable_session(self):
-        return True
+        return False
 
 
 class SMRuler(SpiderRuler):
@@ -199,10 +199,6 @@ class SogouPCRuler(SpiderRuler):
     def has_next_page(self, soup):
         return soup.find(id='sogou_next')
 
-    @property
-    def enable_session(self):
-        return False
-
 
 class SogouMobileRuler(SpiderRuler):
     def __init__(self, spider):
@@ -270,10 +266,6 @@ class SogouMobileRuler(SpiderRuler):
     def has_next_page(self, soup):
         li = soup.find('p').find(text=True).strip().split(',')
         return int(li[0]) > int(li[1])
-
-    @property
-    def enable_session(self):
-        return False
 
     def is_forbid(self, r, soup):
         if len(soup.body.contents) == 0:
