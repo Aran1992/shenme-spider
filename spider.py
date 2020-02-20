@@ -706,9 +706,8 @@ class Spider(metaclass=ABCMeta):
                 print('检查到网络断开，%s秒之后尝试重新抓取' % self.reconnect_interval_time)
                 time.sleep(self.reconnect_interval_time)
                 continue
-            (ok, msg) = self.ruler.is_forbid(r, BeautifulSoup(r.text, 'lxml'))
-            if not ok:
-                print('%s，%s秒之后尝试重新抓取' % (msg, self.error_interval_time))
+            if self.ruler.is_forbid(r, BeautifulSoup(r.text, 'lxml')):
+                print('该IP已被判定为爬虫，暂时无法获取到信息，%s秒之后尝试重新抓取' % self.error_interval_time)
                 time.sleep(self.error_interval_time)
                 continue
         self.last_request_time = datetime.now()
