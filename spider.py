@@ -42,6 +42,10 @@ def is_list_include_another_list(child_list, parent_list):
         return False
 
 
+def page_has_text(soup, text):
+    return len(soup.find_all(text=re.compile(text))) > 0
+
+
 class MyError(RuntimeError):
     pass
 
@@ -100,6 +104,10 @@ class SpiderRuler(metaclass=ABCMeta):
     def enable_session(self):
         return False
 
+    @abstractmethod
+    def has_no_result(self, soup):
+        return False
+
 
 class SMRuler(SpiderRuler):
     def __init__(self, spider):
@@ -152,6 +160,9 @@ class SMRuler(SpiderRuler):
         return soup.body is None \
                or (soup.title and soup.title.text == '验证码拦截')
 
+    def has_no_result(self, soup):
+        return page_has_text(soup, '1. 看看输入的文字是否有误') and page_has_text(soup, '2. 去掉可能不必要的字词，如"的"、"什么"等')
+
 
 class SogouPCRuler(SpiderRuler):
     def __init__(self, spider):
@@ -199,6 +210,9 @@ class SogouPCRuler(SpiderRuler):
 
     def has_next_page(self, soup):
         return soup.find(id='sogou_next')
+
+    def has_no_result(self, soup):
+        return soup.find('p', class_='num-tips', text=re.compile('.*?搜狗已为您找到约0条相关结果.*?'))
 
 
 class SogouMobileRuler(SpiderRuler):
@@ -275,6 +289,9 @@ class SogouMobileRuler(SpiderRuler):
             if s == '403':
                 return True
 
+    def has_no_result(self, soup):
+        return soup.find('p').find(text=True).strip() == '1,1,10,0[PAGE_INFO]'
+
 
 class BaiduPCRuler(SpiderRuler):
     def __init__(self, spider):
@@ -340,6 +357,9 @@ class BaiduPCRuler(SpiderRuler):
                 href = next_page_link.get('href')
                 if href:
                     return urljoin(self.base_url, href)
+
+    def has_no_result(self, soup):
+        return False
 
 
 class BaiduMobileRuler(SpiderRuler):
@@ -413,6 +433,9 @@ class BaiduMobileRuler(SpiderRuler):
     def is_forbid(self, r, soup):
         return r.url.startswith('https://wappass.baidu.com/static/captcha')
 
+    def has_no_result(self, soup):
+        return False
+
 
 class SLLPCRuler(SpiderRuler):
     def __init__(self, spider):
@@ -462,10 +485,13 @@ class SLLPCRuler(SpiderRuler):
         return soup.find('a', id='snext') is not None
 
     def is_forbid(self, r, soup):
-        return len(soup.find_all(text=re.compile('亲，系统检测到您操作过于频繁。'))) > 0
+        return page_has_text(soup, '亲，系统检测到您操作过于频繁。')
 
     def enable_session(self):
         return True
+
+    def has_no_result(self, soup):
+        return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '简化查询词或尝试其他相关词')
 
 
 class SLLMobileRuler(SpiderRuler):
@@ -515,11 +541,14 @@ class SLLMobileRuler(SpiderRuler):
             return ''
 
     def has_next_page(self, soup):
-        return len(soup.find_all(text=re.compile('.*MSO.hasNextPage = true;.*'))) > 0
+        return page_has_text(soup, '.*MSO.hasNextPage = true;.*')
 
     def is_forbid(self, r, soup):
-        return len(soup.find_all(text=re.compile('请输入验证码以便正常访问'))) > 0 \
+        return page_has_text(soup, '请输入验证码以便正常访问') \
                or r.url.startswith('http://qcaptcha.so.com/?ret=')
+
+    def has_no_result(self, soup):
+        return False
 
 
 class LittleRankSpider:
@@ -597,6 +626,8 @@ class Spider(metaclass=ABCMeta):
         self.reconnect_interval_time = float(cfg.get('config', 'reconnect_interval_time'))
         self.error_interval_time = float(cfg.get('config', 'error_interval_time'))
         self.is_keyword_domain_map = int(cfg.get('config', 'is_keyword_domain_map')) == 1
+        self.keyword = ''
+        self.page = 0
 
     def main(self):
         try:
@@ -661,6 +692,7 @@ class Spider(metaclass=ABCMeta):
             time.sleep(self.ruler.request_interval_time - passed)
         r = None
         soup = None
+        items = None
         while r is None or soup is None:
             try:
                 r = self.get(url, params=params)
@@ -680,10 +712,19 @@ class Spider(metaclass=ABCMeta):
                 r = None
                 soup = None
                 continue
+            items = self.ruler.get_all_item(soup)
+            if len(items) == 0:
+                if not self.ruler.has_no_result(soup):
+                    with open(f'新型爬虫返回页_可以发送给开发进行分析_{self.ruler.engine_name}-{self.keyword}-{self.page}.html',
+                              'w', encoding='utf-8') as f:
+                        f.write(r.url + '\n' + soup.prettify())
+                    print('该IP已被判定为爬虫，暂时无法获取到信息，%s秒之后尝试重新抓取' % self.error_interval_time)
+                    time.sleep(self.error_interval_time)
+                    r = None
+                    continue
         self.last_request_time = datetime.now()
         self.url = r.url
         self.text = r.text
-        items = self.ruler.get_all_item(soup)
         return r, soup, items
 
     def get_real_url(self, start_url):
@@ -768,6 +809,7 @@ class RankSpider(Spider):
         print('总共要查找%s关键词' % self.keyword_count)
         for i, keyword in enumerate(self.keyword_domains_map.keys()):
             self.keyword_index = i + 1
+            self.keyword = keyword
             domain_set = self.keyword_domains_map[keyword]
             self.get_rank(i + 1, keyword, domain_set)
         self.save_result()
@@ -811,6 +853,7 @@ class RankSpider(Spider):
         self.reset_session()
         page_url = None
         for i in range(PAGE):
+            self.page = i + 1
             try:
                 page_url, soup = self.get_page(i + 1, keyword, domain_set, page_url)
                 if not soup or not self.ruler.has_next_page(soup):
