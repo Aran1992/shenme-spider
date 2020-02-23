@@ -43,7 +43,7 @@ def is_list_include_another_list(child_list, parent_list):
 
 
 def page_has_text(soup, text):
-    return len(soup.find_all(text=re.compile(text))) > 0
+    return soup.find(text=re.compile(text))
 
 
 class MyError(RuntimeError):
@@ -359,7 +359,7 @@ class BaiduPCRuler(SpiderRuler):
                     return urljoin(self.base_url, href)
 
     def has_no_result(self, soup):
-        return False
+        return page_has_text(soup, '很抱歉，没有找到与') and page_has_text(soup, '请检查您的输入是否正确')
 
 
 class BaiduMobileRuler(SpiderRuler):
@@ -434,7 +434,7 @@ class BaiduMobileRuler(SpiderRuler):
         return r.url.startswith('https://wappass.baidu.com/static/captcha')
 
     def has_no_result(self, soup):
-        return False
+        return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '抱歉，没有找到与')
 
 
 class SLLPCRuler(SpiderRuler):
@@ -487,11 +487,12 @@ class SLLPCRuler(SpiderRuler):
     def is_forbid(self, r, soup):
         return page_has_text(soup, '亲，系统检测到您操作过于频繁。')
 
+    # 开启session的话被识别为机器人的速度会大幅降低
     def enable_session(self):
         return True
 
     def has_no_result(self, soup):
-        return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '简化查询词或尝试其他相关词')
+        return (page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '简化查询词或尝试其他相关词')) or True
 
 
 class SLLMobileRuler(SpiderRuler):
@@ -541,14 +542,14 @@ class SLLMobileRuler(SpiderRuler):
             return ''
 
     def has_next_page(self, soup):
-        return page_has_text(soup, '.*MSO.hasNextPage = true;.*')
+        return page_has_text(soup, 'MSO.hasNextPage = true;')
 
     def is_forbid(self, r, soup):
         return page_has_text(soup, '请输入验证码以便正常访问') \
                or r.url.startswith('http://qcaptcha.so.com/?ret=')
 
     def has_no_result(self, soup):
-        return False
+        return (page_has_text(soup, '很抱歉搜索君没有找到与') and page_has_text(soup, '检查输入是否正确')) or True
 
 
 class LittleRankSpider:
@@ -693,6 +694,7 @@ class Spider(metaclass=ABCMeta):
         r = None
         soup = None
         items = None
+        times = 0
         while r is None or soup is None:
             try:
                 r = self.get(url, params=params)
@@ -718,6 +720,9 @@ class Spider(metaclass=ABCMeta):
                     with open(f'新型爬虫返回页_可以发送给开发进行分析_{self.ruler.engine_name}-{self.keyword}-{self.page}.html',
                               'w', encoding='utf-8') as f:
                         f.write(r.url + '\n' + soup.prettify())
+                    times = times + 1
+                    if times > 5:
+                        raise MyError('尝试多次依然无法获取到正确内容')
                     print('该IP已被判定为爬虫，暂时无法获取到信息，%s秒之后尝试重新抓取' % self.error_interval_time)
                     time.sleep(self.error_interval_time)
                     r = None
