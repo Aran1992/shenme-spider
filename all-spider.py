@@ -1,12 +1,12 @@
 from spider import *
 
 if __name__ == '__main__':
-    spider_list = [
+    spider_list = (
         (RankSpider, '排名'),
         (SiteSpider, '收录'),
         (CheckSpider, '核对')
-    ]
-    engine_list = [
+    )
+    engine_list = (
         (SMRuler, '神马'),
         (SogouPCRuler, '搜狗PC'),
         (SogouMobileRuler, '搜狗MOBILE'),
@@ -14,7 +14,7 @@ if __name__ == '__main__':
         (BaiduMobileRuler, '百度MOBILE'),
         (SLLPCRuler, '360PC'),
         (SLLMobileRuler, '360MOBILE'),
-    ]
+    )
     spider_index = input('''要查找什么数据？
 %s
 ''' % '\n'.join(['%s 请输入：%s' % (ruler_name, i) for (i, (_, ruler_name)) in enumerate(spider_list)]))

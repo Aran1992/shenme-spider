@@ -149,7 +149,8 @@ class SMRuler(SpiderRuler):
         return soup.find('a', class_='next')
 
     def is_forbid(self, r, soup):
-        return soup.body is None
+        return soup.body is None \
+               or (soup.title and soup.title.text == '验证码拦截')
 
 
 class SogouPCRuler(SpiderRuler):
@@ -461,9 +462,10 @@ class SLLPCRuler(SpiderRuler):
         return soup.find('a', id='snext') is not None
 
     def is_forbid(self, r, soup):
-        reg = re.compile('亲，系统检测到您操作过于频繁。')
-        tag = soup.find_all(text=reg)
-        return len(tag) > 0
+        return len(soup.find_all(text=re.compile('亲，系统检测到您操作过于频繁。'))) > 0
+
+    def enable_session(self):
+        return True
 
 
 class SLLMobileRuler(SpiderRuler):
@@ -513,9 +515,7 @@ class SLLMobileRuler(SpiderRuler):
             return ''
 
     def has_next_page(self, soup):
-        reg = re.compile('.*MSO.hasNextPage = true;.*')
-        tag = soup.find_all(text=reg)
-        return len(tag) > 0
+        return len(soup.find_all(text=re.compile('.*MSO.hasNextPage = true;.*'))) > 0
 
     def is_forbid(self, r, soup):
         return len(soup.find_all(text=re.compile('请输入验证码以便正常访问'))) > 0 \
@@ -672,6 +672,8 @@ class Spider(metaclass=ABCMeta):
                 time.sleep(self.reconnect_interval_time)
                 continue
             soup = BeautifulSoup(r.text, 'lxml')
+            # with open('1.html', 'w', encoding='utf-8') as f:
+            #     f.write(soup.prettify())
             if self.ruler.is_forbid(r, soup):
                 print('该IP已被判定为爬虫，暂时无法获取到信息，%s秒之后尝试重新抓取' % self.error_interval_time)
                 time.sleep(self.error_interval_time)
@@ -741,6 +743,9 @@ class RankSpider(Spider):
     def __init__(self, ruler_class):
         Spider.__init__(self, ruler_class)
         self.keyword_domains_map = {}
+        self.keyword_count = 0
+        self.keyword_index = 0
+        self.start_time = datetime.now()
         self.searched_keywords = []
         self.filename = ''
         self.error_list = []
@@ -758,14 +763,16 @@ class RankSpider(Spider):
         self.started = True
         self.result = []
         self.searched_keywords = []
-        start_time = datetime.now()
-        print('总共要查找%s关键词' % len(self.keyword_domains_map.keys()))
+        self.start_time = datetime.now()
+        self.keyword_count = len(self.keyword_domains_map.keys())
+        print('总共要查找%s关键词' % self.keyword_count)
         for i, keyword in enumerate(self.keyword_domains_map.keys()):
+            self.keyword_index = i + 1
             domain_set = self.keyword_domains_map[keyword]
             self.get_rank(i + 1, keyword, domain_set)
         self.save_result()
         end_time = datetime.now()
-        print('本次查询用时%s' % format_cd_time((end_time - start_time).total_seconds()))
+        print('本次查询用时%s' % format_cd_time((end_time - self.start_time).total_seconds()))
         self.started = False
 
     def get_input(self):
@@ -808,6 +815,8 @@ class RankSpider(Spider):
                 page_url, soup = self.get_page(i + 1, keyword, domain_set, page_url)
                 if not soup or not self.ruler.has_next_page(soup):
                     break
+            except KeyboardInterrupt as e:
+                raise e
             except:
                 self.error_list.append('关键词：%s，页数：%s，错误：\n%s' % (keyword, i + 1, traceback.format_exc()))
                 traceback.print_exc()
@@ -823,6 +832,9 @@ class RankSpider(Spider):
         # with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
         #     f.write(soup.prettify())
         print('本页实际请求URL为%s' % r.url)
+        os.system('title %s%s 关键词：%s/%s 页数：%s/%s 已用时：%s'
+                  % (self.ruler.engine_name, '排名', self.keyword_index, self.keyword_count, page, PAGE,
+                     format_cd_time((datetime.now() - self.start_time).total_seconds())))
         rank = 1
         for item in all_item:
             url = self.ruler.get_url(item, r.url)
