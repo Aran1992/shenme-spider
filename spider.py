@@ -199,6 +199,7 @@ class SogouPCRuler(SpiderRuler):
         return r.url.startswith('http://www.sogou.com/antispider') \
                or soup.find('div', class_='results') is None
 
+    # results里面可能没有条目，重复请求的话可能又会有了
     def get_all_item(self, soup):
         return soup.find('div', class_='results').find_all('div', recursive=False)
 
