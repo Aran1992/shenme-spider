@@ -100,9 +100,10 @@ class SpiderRuler(metaclass=ABCMeta):
     def get_next_page_url(self, soup):
         return None
 
+    # 默认都开启，有session搜索引擎返回的数据更接近真实情况，而且也比较不容易出错
     @property
     def enable_session(self):
-        return False
+        return True
 
     @abstractmethod
     def has_no_result(self, soup):
@@ -492,7 +493,7 @@ class SLLPCRuler(SpiderRuler):
         return True
 
     def has_no_result(self, soup):
-        return (page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '简化查询词或尝试其他相关词')) or True
+        return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '简化查询词或尝试其他相关词')
 
 
 class SLLMobileRuler(SpiderRuler):
@@ -549,7 +550,7 @@ class SLLMobileRuler(SpiderRuler):
                or r.url.startswith('http://qcaptcha.so.com/?ret=')
 
     def has_no_result(self, soup):
-        return (page_has_text(soup, '很抱歉搜索君没有找到与') and page_has_text(soup, '检查输入是否正确')) or True
+        return page_has_text(soup, '很抱歉搜索君没有找到与') and page_has_text(soup, '检查输入是否正确')
 
 
 class LittleRankSpider:
