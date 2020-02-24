@@ -247,7 +247,13 @@ class SogouMobileRuler(SpiderRuler):
         }
 
     def get_all_item(self, soup):
-        return soup.find_all('a', class_='resultLink')
+        items = []
+        divs = soup.find_all('div', class_='vrResult')
+        for div in divs:
+            a = div.find('a', class_='resultLink') or div.find('a')
+            if a:
+                items.append(a)
+        return items
 
     def get_url(self, item, page_url):
         url = item.get('href')
