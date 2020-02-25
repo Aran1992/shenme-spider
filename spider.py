@@ -303,7 +303,7 @@ class SogouMobileRuler(SpiderRuler):
                 return True
 
     def has_no_result(self, soup):
-        return soup.find('p').find(text=True).strip() == '1,1,10,0[PAGE_INFO]'
+        return soup.find('p').find(text=True).strip().split(',') == '0[PAGE_INFO]'
 
 
 class BaiduPCRuler(SpiderRuler):
@@ -728,7 +728,11 @@ class Spider(metaclass=ABCMeta):
                 continue
             items = self.ruler.get_all_item(soup)
             if len(items) == 0:
-                if not self.ruler.has_no_result(soup):
+                try:
+                    has_no_result = self.ruler.has_no_result(soup)
+                except:
+                    has_no_result = False
+                if not has_no_result:
                     with open(f'新型爬虫返回页_可以发送给开发进行分析_{self.ruler.engine_name}-{self.keyword}-{self.page}.html',
                               'w', encoding='utf-8') as f:
                         f.write(r.url + '\n' + soup.prettify())
