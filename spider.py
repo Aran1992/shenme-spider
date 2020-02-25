@@ -216,6 +216,11 @@ class SogouPCRuler(SpiderRuler):
     def has_no_result(self, soup):
         return soup.find('p', class_='num-tips', text=re.compile('.*?搜狗已为您找到约0条相关结果.*?'))
 
+    # 开启的话 查找到第五页左右搜索引擎就会认为你是爬虫
+    @property
+    def enable_session(self):
+        return False
+
 
 class SogouMobileRuler(SpiderRuler):
     def __init__(self, spider):
@@ -495,10 +500,6 @@ class SLLPCRuler(SpiderRuler):
     def is_forbid(self, r, soup):
         return page_has_text(soup, '亲，系统检测到您操作过于频繁。')
 
-    # 开启session的话被识别为机器人的速度会大幅降低
-    def enable_session(self):
-        return True
-
     def has_no_result(self, soup):
         return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '简化查询词或尝试其他相关词')
 
@@ -717,6 +718,9 @@ class Spider(metaclass=ABCMeta):
             # with open('1.html', 'w', encoding='utf-8') as f:
             #     f.write(soup.prettify())
             if self.ruler.is_forbid(r, soup):
+                # with open(f'旧型爬虫返回页_{self.ruler.engine_name}-{self.keyword}-{self.page}.html',
+                #           'w', encoding='utf-8') as f:
+                #     f.write(r.url + '\n' + soup.prettify())
                 print('该IP已被判定为爬虫，暂时无法获取到信息，%s秒之后尝试重新抓取' % self.error_interval_time)
                 time.sleep(self.error_interval_time)
                 r = None
