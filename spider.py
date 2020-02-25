@@ -444,8 +444,9 @@ class BaiduMobileRuler(SpiderRuler):
                 return urljoin(self.base_url, href)
 
     def is_forbid(self, r, soup):
+        # 这种情况其实是等待加载，不算爬虫，但是和爬虫的解决方式是一样的，所以添加在这里
         return r.url.startswith('https://wappass.baidu.com/static/captcha') \
-               or (soup.find(id='page-hd') and not soup.find(id='page'))  # 这种情况其实是等待加载，不算爬虫，但是和爬虫的解决方式是一样的，所以添加在这里
+               or (soup.find(id='page-hd') and not soup.find(id='page'))
 
     def has_no_result(self, soup):
         return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '抱歉，没有找到与')
@@ -499,7 +500,9 @@ class SLLPCRuler(SpiderRuler):
         return soup.find('a', id='snext') is not None
 
     def is_forbid(self, r, soup):
-        return page_has_text(soup, '亲，系统检测到您操作过于频繁。')
+        # 这种情况其实是服务器没有返回正确内容，不算爬虫，但是和爬虫的解决方式是一样的，所以添加在这里
+        return page_has_text(soup, '亲，系统检测到您操作过于频繁。') \
+               or (soup.find('ul', class_='result') and len(self.get_all_item(soup)) == 0)
 
     def has_no_result(self, soup):
         return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '简化查询词或尝试其他相关词')
@@ -559,7 +562,9 @@ class SLLMobileRuler(SpiderRuler):
                or r.url.startswith('http://qcaptcha.so.com/?ret=')
 
     def has_no_result(self, soup):
-        return page_has_text(soup, '很抱歉搜索君没有找到与') and page_has_text(soup, '检查输入是否正确')
+        return (page_has_text(soup, '很抱歉搜索君没有找到与') and page_has_text(soup, '检查输入是否正确')) \
+               or (len(soup.prettify().strip()) == 0) \
+               or page_has_text(soup, 'MSO.hasNextPage = false;')
 
 
 class LittleRankSpider:
