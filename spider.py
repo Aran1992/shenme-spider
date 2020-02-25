@@ -444,7 +444,8 @@ class BaiduMobileRuler(SpiderRuler):
                 return urljoin(self.base_url, href)
 
     def is_forbid(self, r, soup):
-        return r.url.startswith('https://wappass.baidu.com/static/captcha')
+        return r.url.startswith('https://wappass.baidu.com/static/captcha') \
+               or (soup.find(id='page-hd') and not soup.find(id='page'))  # 这种情况其实是等待加载，不算爬虫，但是和爬虫的解决方式是一样的，所以添加在这里
 
     def has_no_result(self, soup):
         return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '抱歉，没有找到与')
