@@ -303,7 +303,7 @@ class SogouMobileRuler(SpiderRuler):
                 return True
 
     def has_no_result(self, soup):
-        return soup.find('p').find(text=True).strip().split(',') == '0[PAGE_INFO]'
+        return soup.find('p').find(text=True).strip().split(',')[3] == '0[PAGE_INFO]'
 
 
 class BaiduPCRuler(SpiderRuler):
