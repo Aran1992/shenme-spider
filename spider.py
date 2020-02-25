@@ -745,7 +745,7 @@ class Spider(metaclass=ABCMeta):
                     times = times + 1
                     if times > 5:
                         raise MyError('尝试多次依然无法获取到正确内容')
-                    print('该IP已被判定为爬虫，暂时无法获取到信息，%s秒之后尝试重新抓取' % self.error_interval_time)
+                    print('请求页面内容异常，可能是被认定为是爬虫，暂时无法获取到信息，%s秒之后尝试重新抓取' % self.error_interval_time)
                     time.sleep(self.error_interval_time)
                     r = None
                     continue
