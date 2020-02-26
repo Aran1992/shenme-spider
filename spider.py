@@ -109,6 +109,9 @@ class SpiderRuler(metaclass=ABCMeta):
     def has_no_result(self, soup):
         return False
 
+    def retry_page(self, soup):
+        return False
+
 
 class SMRuler(SpiderRuler):
     def __init__(self, spider):
@@ -500,12 +503,13 @@ class SLLPCRuler(SpiderRuler):
         return soup.find('a', id='snext') is not None
 
     def is_forbid(self, r, soup):
-        # 这种情况其实是服务器没有返回正确内容，不算爬虫，但是和爬虫的解决方式是一样的，所以添加在这里
-        return page_has_text(soup, '亲，系统检测到您操作过于频繁。') \
-               or (soup.find('ul', class_='result') and len(self.get_all_item(soup)) == 0)
+        return page_has_text(soup, '亲，系统检测到您操作过于频繁。')
 
     def has_no_result(self, soup):
         return page_has_text(soup, '检查输入是否正确') and page_has_text(soup, '简化查询词或尝试其他相关词')
+
+    def retry_page(self, soup):
+        return soup.find('ul', class_='result') and len(self.get_all_item(soup)) == 0
 
 
 class SLLMobileRuler(SpiderRuler):
@@ -739,9 +743,10 @@ class Spider(metaclass=ABCMeta):
                 except:
                     has_no_result = False
                 if not has_no_result:
-                    with open(f'新型爬虫返回页_可以发送给开发进行分析_{self.ruler.engine_name}-{self.keyword}-{self.page}.html',
-                              'w', encoding='utf-8') as f:
-                        f.write(r.url + '\n' + soup.prettify())
+                    if not self.ruler.retry_page(soup):
+                        with open(f'新型爬虫返回页_可以发送给开发进行分析_{self.ruler.engine_name}-{self.keyword}-{self.page}.html',
+                                  'w', encoding='utf-8') as f:
+                            f.write(r.url + '\n' + soup.prettify())
                     times = times + 1
                     if times > 5:
                         raise MyError('尝试多次依然无法获取到正确内容')
