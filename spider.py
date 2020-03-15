@@ -112,6 +112,16 @@ class SpiderRuler(metaclass=ABCMeta):
     def retry_page(self, soup):
         return False
 
+    def is_unsafe(self, item):
+        return False
+
+    @property
+    def enable_unsafe(self):
+        return False
+
+    def get_total_item_count(self, soup):
+        return 0
+
 
 class SMRuler(SpiderRuler):
     def __init__(self, spider):
@@ -376,6 +386,20 @@ class BaiduPCRuler(SpiderRuler):
 
     def has_no_result(self, soup):
         return page_has_text(soup, '很抱歉，没有找到与') and page_has_text(soup, '请检查您的输入是否正确')
+
+    def is_unsafe(self, item):
+        return item.find('div', class_='unsafe_content f13') is not None
+
+    @property
+    def enable_unsafe(self):
+        return True
+
+    def get_total_item_count(self, soup):
+        span = soup.find('span', class_='nums_text')
+        if span:
+            return span.find(text=True).split('百度为您找到相关结果约')[1].split('个')[0]
+        else:
+            return 0
 
 
 class BaiduMobileRuler(SpiderRuler):
@@ -822,6 +846,7 @@ class RankSpider(Spider):
         self.searched_keywords = []
         self.filename = ''
         self.error_list = []
+        self.unsafe_item_list = []
         self.main()
 
     def search(self):
@@ -904,6 +929,8 @@ class RankSpider(Spider):
         else:
             params = self.ruler.get_params(keyword, page)
             (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
+        if self.ruler.enable_unsafe and page == 1:
+            self.unsafe_item_list.append((keyword, self.ruler.get_total_item_count(soup), None, None, None))
         # with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
         #     f.write(soup.prettify())
         print('本页实际请求URL为%s' % r.url)
@@ -928,6 +955,8 @@ class RankSpider(Spider):
                             datetime.now()
                         ))
                         break
+                if self.ruler.is_unsafe(item):
+                    self.unsafe_item_list.append((keyword, None, url, page, rank))
                 rank += 1
         return self.ruler.get_next_page_url(soup), soup
 
@@ -946,6 +975,7 @@ class RankSpider(Spider):
         print('查询结束，查询结果保存在 %s' % file_name)
         self.save_un_searched()
         self.save_error_list(self.error_list)
+        self.save_unsafe_item_list()
 
     def save_un_searched(self):
         un_searched_keywords = []
@@ -969,6 +999,17 @@ class RankSpider(Spider):
             f.write('\n\n'.join(err_list))
         print(filename)
         print('排名查询过程中产生了一些错误，虽然没有终止运行，但是可能会让结果不够准确，请将记录发给开发人员')
+
+    def save_unsafe_item_list(self):
+        if len(self.unsafe_item_list) == 0:
+            return
+        filename = f'关键词是否空白以及安全提醒网站-{self.ruler.engine_name}-{get_cur_time_filename()}.log'
+        wb = Workbook()
+        ws = wb.active
+        ws.append(('关键词', '搜索结果个数', '安全提醒', '页数', '排名'))
+        for (keyword, page_count, unsafe_url, page, rank) in self.unsafe_item_list:
+            ws.append((keyword, page_count, unsafe_url, page, rank))
+        wb.save(filename)
 
 
 class SiteSpider(Spider):
