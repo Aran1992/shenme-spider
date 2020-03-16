@@ -1003,7 +1003,7 @@ class RankSpider(Spider):
     def save_unsafe_item_list(self):
         if len(self.unsafe_item_list) == 0:
             return
-        filename = f'关键词是否空白以及安全提醒网站-{self.ruler.engine_name}-{get_cur_time_filename()}.log'
+        filename = f'关键词是否空白以及安全提醒网站-{self.ruler.engine_name}-{get_cur_time_filename()}.xlsx'
         wb = Workbook()
         ws = wb.active
         ws.append(('关键词', '搜索结果个数', '安全提醒', '页数', '排名'))
