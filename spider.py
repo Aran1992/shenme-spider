@@ -632,6 +632,8 @@ class LittleRankSpider:
         for item in all_item:
             try:
                 url = ruler.get_url(item, r.url)
+            except KeyboardInterrupt as e:
+                raise e
             except:
                 url = None
                 self.error_list.append(traceback.format_exc())
@@ -764,6 +766,8 @@ class Spider(metaclass=ABCMeta):
             if len(items) == 0:
                 try:
                     has_no_result = self.ruler.has_no_result(soup)
+                except KeyboardInterrupt as e:
+                    raise e
                 except:
                     has_no_result = False
                 if not has_no_result:
