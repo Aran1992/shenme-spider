@@ -115,13 +115,6 @@ class SpiderRuler(metaclass=ABCMeta):
     def is_unsafe(self, item):
         return False
 
-    @property
-    def enable_unsafe(self):
-        return False
-
-    def get_total_item_count(self, soup):
-        return 0
-
 
 class SMRuler(SpiderRuler):
     def __init__(self, spider):
@@ -389,17 +382,6 @@ class BaiduPCRuler(SpiderRuler):
 
     def is_unsafe(self, item):
         return item.find('div', class_='unsafe_content f13') is not None
-
-    @property
-    def enable_unsafe(self):
-        return True
-
-    def get_total_item_count(self, soup):
-        span = soup.find('span', class_='nums_text')
-        if span:
-            return span.find(text=True).split('百度为您找到相关结果约')[1].split('个')[0]
-        else:
-            return 0
 
 
 class BaiduMobileRuler(SpiderRuler):
@@ -933,8 +915,8 @@ class RankSpider(Spider):
         else:
             params = self.ruler.get_params(keyword, page)
             (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
-        if self.ruler.enable_unsafe and page == 1:
-            self.unsafe_item_list.append((keyword, self.ruler.get_total_item_count(soup), None, None, None))
+        if page == 1:
+            self.unsafe_item_list.append((keyword, (self.ruler.has_no_result(soup) and "是") or "否", None, None, None))
         # with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
         #     f.write(soup.prettify())
         print('本页实际请求URL为%s' % r.url)
@@ -1010,9 +992,9 @@ class RankSpider(Spider):
         filename = f'关键词是否空白以及安全提醒网站-{self.ruler.engine_name}-{get_cur_time_filename()}.xlsx'
         wb = Workbook()
         ws = wb.active
-        ws.append(('关键词', '搜索结果个数', '安全提醒', '页数', '排名'))
-        for (keyword, page_count, unsafe_url, page, rank) in self.unsafe_item_list:
-            ws.append((keyword, page_count, unsafe_url, page, rank))
+        ws.append(('关键词', '是否空白', '安全提醒', '页数', '排名'))
+        for (keyword, has_no_result, unsafe_url, page, rank) in self.unsafe_item_list:
+            ws.append((keyword, has_no_result, unsafe_url, page, rank))
         wb.save(filename)
 
 
