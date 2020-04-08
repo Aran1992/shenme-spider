@@ -916,7 +916,13 @@ class RankSpider(Spider):
             params = self.ruler.get_params(keyword, page)
             (r, soup, all_item) = self.safe_request(self.ruler.base_url, params=params)
         if page == 1:
-            self.unsafe_item_list.append((keyword, (self.ruler.has_no_result(soup) and "是") or "否", None, None, None))
+            try:
+                has_no_result = self.ruler.has_no_result(soup)
+            except KeyboardInterrupt as e:
+                raise e
+            except:
+                has_no_result = False
+            self.unsafe_item_list.append((keyword, (has_no_result and "是") or "否", None, None, None))
         # with open('%s-%s.html' % (keyword, page), 'w', encoding='utf-8') as f:
         #     f.write(soup.prettify())
         print('本页实际请求URL为%s' % r.url)
