@@ -264,7 +264,7 @@ class SogouMobileRuler(SpiderRuler):
         divs = soup.find_all('div', class_='vrResult')
         for div in divs:
             a = div.find('a', class_='resultLink') or div.find('a')
-            if a:
+            if a and a.get('href') is not None:
                 items.append(a)
         return items
 
