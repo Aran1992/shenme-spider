@@ -6,6 +6,7 @@ def all():
     name = 'all-spider'
     os.system('pyinstaller -F %s.py' % name)
     zipf = zipfile.ZipFile('%s.zip' % name, 'w')
+    zipf.write('./run-all-spider.cmd', 'run-all-spider.cmd')
     zipf.write('./config.ini', 'config.ini')
     zipf.write('./import/input.xlsx', 'import/input.xlsx')
     zipf.write('./要查收录的网址列表XLSX/域名列表.xlsx', '要查收录的网址列表XLSX/域名列表.xlsx')

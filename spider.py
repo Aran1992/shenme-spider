@@ -1,6 +1,7 @@
 import ast
 import os
 import re
+import sys
 import time
 import traceback
 from abc import ABCMeta, abstractmethod
@@ -682,8 +683,13 @@ class Spider(metaclass=ABCMeta):
             input('请将最新的error.log文件发给技术人员')
 
     def get_mode(self):
+        first_run = True
         while True:
-            run_mode = input('定时运行（输入1）还是马上运行（输入0）？')
+            if first_run and len(sys.argv) >= 4:
+                run_mode = sys.argv[3]
+            else:
+                run_mode = input('定时运行（输入1）还是马上运行（输入0）？')
+            first_run = False
             if run_mode == '0':
                 self.search()
             elif run_mode == '1':

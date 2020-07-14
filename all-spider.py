@@ -1,4 +1,5 @@
 from spider import *
+import sys
 
 if __name__ == '__main__':
     spider_list = (
@@ -15,12 +16,21 @@ if __name__ == '__main__':
         (SLLPCRuler, '360PC'),
         (SLLMobileRuler, '360MOBILE'),
     )
-    spider_index = input('''要查找什么数据？
+
+    if len(sys.argv) >= 2:
+        spider_index = sys.argv[1]
+    else:
+        spider_index = input('''要查找什么数据？
 %s
 ''' % '\n'.join(['%s 请输入：%s' % (ruler_name, i) for (i, (_, ruler_name)) in enumerate(spider_list)]))
-    engine_index = input('''要查找哪个搜索引擎？
+
+    if len(sys.argv) >= 3:
+        engine_index = sys.argv[2]
+    else:
+        engine_index = input('''要查找哪个搜索引擎？
 %s
 ''' % '\n'.join(['%s 请输入：%s' % (ruler_name, i) for (i, (_, ruler_name)) in enumerate(engine_list)]))
+
     (spider_class, spider_name) = spider_list[int(spider_index)]
     (ruler_class_, ruler_name) = engine_list[int(engine_index)]
     os.system('title %s%s' % (ruler_name, spider_name))
