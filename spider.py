@@ -384,6 +384,10 @@ class BaiduPCRuler(SpiderRuler):
     def is_unsafe(self, item):
         return item.find('div', class_='unsafe_content f13') is not None
 
+    def is_forbid(self, r, soup):
+        # 这种情况其实是等待加载，不算爬虫，但是和爬虫的解决方式是一样的，所以添加在这里
+        return r.url.startswith('https://wappass.baidu.com/static/captcha')
+
 
 class BaiduMobileRuler(SpiderRuler):
     def __init__(self, spider):
