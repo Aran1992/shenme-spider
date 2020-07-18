@@ -367,12 +367,12 @@ class BaiduPCRuler(SpiderRuler):
         return ''.join(item.find('a').findAll(text=lambda text: not isinstance(text, Comment)))
 
     def has_next_page(self, soup):
-        return soup.find('a', text='下一页>')
+        return soup.find('a', text='下一页 >')
 
     def get_next_page_url(self, soup):
         page_div = soup.find(id="page")
         if page_div:
-            next_page_link = page_div.find('a', text='下一页>')
+            next_page_link = page_div.find('a', text='下一页 >')
             if next_page_link:
                 href = next_page_link.get('href')
                 if href:
